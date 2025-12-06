@@ -1,0 +1,75 @@
+version: "3.8"
+
+services:
+  
+  backend:
+    build: ./backend
+    container_name: django_backend
+    volumes:
+      - ./backend:/app
+      - ./backend/staticfiles:/app/staticfiles
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - calcivision_network
+    ports:
+      - "8000:8000" # Gunicorn (WSGI)
+      - "8001:8001" # Daphne (ASGI)
+
+  frontend:
+    build: ./frontend
+    container_name: react_frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+    depends_on:
+      - backend
+    networks:
+      - calcivision_network
+  
+  db:
+    image: mysql:8
+    container_name: mysql_database
+    restart: always
+    volumes:
+      - mysqldata:/var/lib/mysql
+    environment:
+      - MYSQL_DATABASE=calcivision
+      - MYSQL_USER=admin
+      - MYSQL_PASSWORD=password
+      - MYSQL_ROOT_PASSWORD=root
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      retries: 10
+    networks:
+      - calcivision_network
+    ports:
+      - 3307:3306   
+
+  
+  redis:
+    image: redis:7
+    container_name: redis_broker
+    ports:
+      - "6379:6379"
+    networks:
+      - calcivision_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 30s
+      retries: 5
+
+networks:
+  calcivision_network:
+
+volumes:
+  mysqldata:

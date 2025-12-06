@@ -1,0 +1,9 @@
+.form-container {
+  display: flex;
+  flex-direction: column;
+  margin: 50px auto;
+  padding: 20px;
+  max-width: 400px;
+}
+
+/* Isto já não está em uso porem devemos ter importado em algum lado daí ainda não podermos apagar */

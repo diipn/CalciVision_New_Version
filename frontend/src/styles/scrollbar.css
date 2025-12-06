@@ -1,0 +1,22 @@
+/* Estilos personalizados para as barras de scroll */
+
+/* width */
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+/* Track */
+::-webkit-scrollbar-track {
+  background: #FFEAEA;
+}
+
+/* Handle */
+::-webkit-scrollbar-thumb {
+  background: #ff9999;
+}
+
+/* Handle on hover */
+::-webkit-scrollbar-thumb:hover {
+  background: #fc6f6f;
+}
+

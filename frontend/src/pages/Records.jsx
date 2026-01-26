@@ -52,7 +52,7 @@ const Records = () => {
   const handleDeleteReport = async (reportId) => {
     try {
       await deleteReport(reportId);
-      fetchData();
+      reloadTable();
     } catch (error) {
       console.error("Erro ao deletar relatório:", error);
       alert("Erro ao deletar relatório.");
@@ -88,7 +88,7 @@ const Records = () => {
         <p className="text-gray-600">Loading reports...</p>
       ) : filteredPatients.length > 0 ? (
         <table className="w-full table-fixed border border-collapse shadow-md rounded-lg">
-          <thead className="bg-green-dark text-white">
+          <thead className="bg-red-dark text-white">
             <tr>
               <th className="w-1/3 px-4 py-2 text-left">Report Name</th>
               <th className="w-1/10 px-4 py-2 text-left">Patient ID</th>
@@ -100,7 +100,7 @@ const Records = () => {
           </thead>
           <tbody>
             {filteredReports.map((report) => {
-              const reportPatient = patients.find(patient => patient.id === report.patient) || {};
+              const reportPatient = patients.filter(patient => patient.id === report.patient)[0];
 
               return (
                 <tr key={report.id} className="relative border-b hover:bg-gray-50">
@@ -113,7 +113,7 @@ const Records = () => {
                     </div>
                   </td>
                   <td className="text-sm p-3 text-left">{report.patient}</td>
-                  <td className="text-sm p-3 text-left">{reportPatient.name || '—'}</td>
+                  <td className="text-sm p-3 text-left">{reportPatient.name}</td>
                   <td className="text-sm p-3 text-left">{reportPatient.age || "N/A"}</td>
                   <td className="p-3 text-center">
                     <div className={`w-full py-3 rounded-lg text-sm ${report.hasCalcification ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"}`}>

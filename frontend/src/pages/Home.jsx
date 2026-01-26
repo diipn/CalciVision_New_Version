@@ -62,12 +62,12 @@ const Home = () => {
             </div>
           </div>
           <div className="flex gap-4">
-            <div className="bg-green rounded-lg shadow-lg overflow-hidden">
+            <div className="bg-red rounded-lg shadow-lg overflow-hidden">
               <img src={AIDetectionImage} alt="AI Detection" role="img" className="object-cover w-full h-36" />
               <div className="px-6 py-4 text-white">
                 <h4 className="font-medium mb-2">AI Classification</h4>
                 <p className="font-light text-sm text-gray-soft">Automated Echocardiographic and MRI Annotation and Valve Calcification Detection Tool powered by our AI models.</p>
-                <div role="button" className="w-full max-w-30 m-auto py-2 mt-4 text-center rounded-sm text-lg font-medium bg-green-dark">
+                <div role="button" className="w-full max-w-30 m-auto py-2 mt-4 text-center rounded-sm text-lg font-medium bg-red-dark">
                   <Link to="/select_echo" target="_blank">
                     Start
                   </Link>
@@ -79,7 +79,7 @@ const Home = () => {
               <div className="px-6 py-4 text-gray-dark">
                 <h4 className="font-medium mb-2">Automatic Reports</h4>
                 <p className="font-light text-sm text-gray-dark">Generate complete echocardiographic reports regarding aortic valve clasification for any patient with our AI.</p>
-                <div role="button" className="w-full max-w-30 m-auto py-2 mt-4 text-center rounded-sm text-lg font-medium bg-green-dark text-white">
+                <div role="button" className="w-full max-w-30 m-auto py-2 mt-4 text-center rounded-sm text-lg font-medium bg-red-dark text-white">
                   <Link to="/reports" target="_blank">
                     Start
                   </Link>

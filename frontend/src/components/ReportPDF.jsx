@@ -10,7 +10,7 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: 10,
-    borderBottom: '1.5 solid #2F7D5D',
+    borderBottom: '1.5 solid #B54A4A',
     paddingBottom: 5
   },
   title: {
@@ -18,7 +18,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
     marginBottom: 3,
-    color: '#2F7D5D',
+    color: '#B54A4A',
     letterSpacing: 0.3
   },
   subtitle: {
@@ -34,16 +34,16 @@ const styles = StyleSheet.create({
   patientInfo: {
     marginBottom: 10,
     padding: 7,
-    backgroundColor: '#E6F6EA',
+    backgroundColor: '#FFEAEA',
     borderRadius: 3,
-    border: '1 solid #D3EBD7'
+    border: '1 solid #EDD3D2'
   },
   sectionTitle: {
     fontSize: 9.5,
     fontWeight: 'bold',
     marginTop: 6,
     marginBottom: 4,
-    color: '#2F7D5D',
+    color: '#B54A4A',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     borderBottom: '1 solid #E8E8E8',
@@ -62,9 +62,9 @@ const styles = StyleSheet.create({
   conclusion: {
     marginTop: 6,
     padding: 7,
-    backgroundColor: '#F2FBF4',
+    backgroundColor: '#F0F0F0',
     borderRadius: 3,
-    border: '1 solid #D3EBD7'
+    border: '1 solid #D9D9D9'
   },
   signature: {
     marginTop: 12,
@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
   },
   findingBullet: {
     fontSize: 8.5,
-    color: '#2F7D5D',
+    color: '#B54A4A',
     marginRight: 4,
     marginTop: 1
   },
@@ -128,7 +128,7 @@ const styles = StyleSheet.create({
     lineHeight: 1.15
   },
   highlight: {
-    backgroundColor: '#CFF2D8',
+    backgroundColor: '#FFD06A',
     padding: 1,
     borderRadius: 1
   },
@@ -150,22 +150,14 @@ const styles = StyleSheet.create({
     bottom: 10,
     right: 18,
     color: '#727272'
-  },
-  reportSection: {
-    marginTop: 6,
-    padding: 6,
-    backgroundColor: '#E6F6EA',
-    borderRadius: 3,
-    border: '1 solid #D3EBD7'
   }
 });
 
-const ReportPDF = ({ data, patient, medico, reportText }) => {
+const ReportPDF = ({ data, patient, medico }) => {
   const hasCalcification = data.some(item => item.is_calcified);
   const calcifiedFrames = data.filter(item => item.is_calcified).length;
   const totalFrames = data.length;
-  const calcificationPercentage = totalFrames > 0 ? ((calcifiedFrames / totalFrames) * 100).toFixed(1) : 0;
-  const currentDate = new Date().toLocaleDateString('en-US', { 
+  const calcificationPercentage = totalFrames > 0 ? ((calcifiedFrames / totalFrames) * 100).toFixed(1) : 0;  const currentDate = new Date().toLocaleDateString('en-US', { 
     day: '2-digit', 
     month: '2-digit', 
     year: 'numeric' 
@@ -333,13 +325,6 @@ const ReportPDF = ({ data, patient, medico, reportText }) => {
 
       <View style={styles.divider} />
 
-      {reportText && (
-        <View style={styles.reportSection}>
-          <Text style={styles.sectionTitle}>OBSERVAÇÕES CLÍNICAS</Text>
-          <Text style={styles.paragraph}>{reportText}</Text>
-        </View>
-      )}
-
       {/* Conclusion */}
       <View style={styles.conclusion}>
         <Text style={styles.sectionTitle}>CONCLUSION</Text>
@@ -356,7 +341,7 @@ const ReportPDF = ({ data, patient, medico, reportText }) => {
       <View style={styles.signature}>
         <Text>____________________________________</Text>
         <Text style={{fontWeight: 'bold', marginTop: 6, fontSize: 10}}>
-          Dr. {medico?.first_name || 'Médico'} {medico?.last_name || ''}
+          Dr. {medico.first_name} {medico.last_name}
         </Text>
         <Text style={{fontSize: 9, marginTop: 2}}>Cardiologist</Text>
         <Text style={{fontSize: 7, marginTop: 8, color: '#727272'}}>

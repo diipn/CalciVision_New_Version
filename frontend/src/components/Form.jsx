@@ -36,9 +36,9 @@ function Form({ route, method }) {
     };
 
     return (
-        <form onSubmit={handleSubmit} className="flex flex-col m-15 mx-100 p-5 w-100 bg-green-light">
+        <form onSubmit={handleSubmit} className="flex flex-col m-15 mx-100 p-5 w-100 bg-red-light">
             <input
-                className="bg-green-pale p-2 my-3 h-10 rounded-md border border-black w-full focus:outline-none"
+                className="bg-red-pale p-2 my-3 h-10 rounded-md border border-black w-full focus:outline-none"
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -46,7 +46,7 @@ function Form({ route, method }) {
             />
 
             <input
-                className="bg-green-pale p-2 my-3 h-10 rounded-md border border-black text-green-dark w-full focus:outline-none"
+                className="bg-red-pale p-2 my-3 h-10 rounded-md border border-black text-red-dark w-full focus:outline-none"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -56,7 +56,7 @@ function Form({ route, method }) {
             {method === "register" && ( // Se register for verdadeiro, então exibe os campos abaixo
                 <>
                     <input
-                        className="bg-green-pale p-2 my-3 h-10 rounded-md border border-black text-green-dark w-full focus:outline-none"
+                        className="bg-red-pale p-2 my-3 h-10 rounded-md border border-black text-red-dark w-full focus:outline-none"
                         type="text"
                         value={medical_speciality}
                         onChange={(e) => setMedical_speciality(e.target.value)}
@@ -64,7 +64,7 @@ function Form({ route, method }) {
                     />
 
                     <input
-                        className="bg-green-pale p-2 my-3 h-10 rounded-md border border-black text-green-dark w-full focus:outline-none"
+                        className="bg-red-pale p-2 my-3 h-10 rounded-md border border-black text-red-dark w-full focus:outline-none"
                         type="text"
                         value={doctor_number}
                         onChange={(e) => setDoctor_number(e.target.value)}
@@ -75,7 +75,7 @@ function Form({ route, method }) {
 
             <div className="flex justify-center">
                 <br />
-                <button className="mt-7 items-center bg-green h-10 w-50 uppercase text-white rounded-md" type="submit">
+                <button className="mt-7 items-center bg-red h-10 w-50 uppercase text-white rounded-md" type="submit">
                     {name}
                 </button>
             </div>

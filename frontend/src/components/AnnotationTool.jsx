@@ -9,7 +9,7 @@ import ProgressBar from "./ProgressBar";
 import AnnotationDropdown from "./AnnotationDropdown";
 import { useUnsavedStore } from "../store/useUnsavedStore";
 
-export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, rects, setRects, calcificationStatus, setCalcificationStatus, predictedValveBoxes, setPredictedValveBoxes, calcification, setCalcification, predictionHistory, setPredictionHistory, imageSettings, onImageSettingsChange }) {
+export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, rects, setRects, calcificationStatus, setCalcificationStatus, predictedValveBoxes, setPredictedValveBoxes, calcification, setCalcification, predictionHistory, setPredictionHistory }) {
     const [frame] = useImage(frames[currentFrame]?.url)
     // Referências ao stage (a área de desenho) e ao group (o conjunto da imagem com as anotações)
     const stageRef = useRef(null);
@@ -32,11 +32,6 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
 
     // Controla qual é o tipo de ponteiro do rato com base no que o utilizador está a fazer
     const [cursorType, setCursorType] = useState('default');
-
-    const brightness = imageSettings?.brightness ?? 1;
-    const contrast = imageSettings?.contrast ?? 1;
-    const blur = imageSettings?.blur ?? 0;
-    const zoom = imageSettings?.zoom ?? 1;
 
     // Um hook personalizado para iniciar a identificação da válvula de UMA ÚNICA imagem
     const { progress: valveProgress, isLoading: isLoadingValve, startDetection: startSingleDetection, cancelDetection: cancelSingleDetection } = useValveDetection();
@@ -90,12 +85,6 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
             });
         }
     }, [frame, currentFrame]);
-
-    useEffect(() => {
-        if (zoom && Math.abs(zoom - currentScale) > 0.01) {
-            handleZoom(zoom);
-        }
-    }, [zoom]);
 
     // Função para verificar se as coordenadas estão dentro da imagem
     const isWithinImageBounds = (x, y) => {
@@ -183,8 +172,7 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
     const handleZoom = (newScale) => {
 
         const stage = stageRef.current;
-        if (!stage) return;
-        const pointerPosition = stage.getPointerPosition() || { x: stage.width() / 2, y: stage.height() / 2 };
+        const pointerPosition = stage.getPointerPosition();
 
         const mouseX = (pointerPosition.x - currentPosition.x) / currentScale;
         const mouseY = (pointerPosition.y - currentPosition.y) / currentScale;
@@ -203,17 +191,6 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
             return updatedPositions
         })
     }
-
-    const handleImageSettingChange = (key, value) => {
-        const nextSettings = {
-            ...(imageSettings || {}),
-            [key]: value,
-        };
-        onImageSettingsChange?.(nextSettings);
-        if (key === 'zoom') {
-            handleZoom(value);
-        }
-    };
 
     // Função para limpar anotações
     const handleClearAnnotations = () => {
@@ -520,7 +497,7 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
     return (
         <div className='w-[750px] flex flex-col items-center rounded-lg overflow-hidden'>
             {/* Cabeçalho (com os botões) */}
-            <div className='relative bg-green text-white w-full flex items-center px-6 py-3'>
+            <div className='relative bg-red text-white w-full flex items-center px-6 py-3'>
                 <h5 className='mr-4'>Manual Annotation</h5>
 
                 <div className='flex ml-auto'>
@@ -539,7 +516,7 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
                     {isDrawing ? (
                         <button 
                             onClick={toggleDrawingMode} 
-                            className='flex items-center bg-green-dark rounded-lg py-2 px-4 space-x-2 text-white'
+                            className='flex items-center bg-red-dark rounded-lg py-2 px-4 space-x-2 text-white'
                             title='Cancel Manual Annotation'
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" width={24} height={24} viewBox="0 0 24 24"><path fill="currentColor" d="M18.66 2c-.26 0-.5.09-.69.28l-1.84 1.85l3.75 3.75l1.84-1.85c.39-.39.39-1.03 0-1.4l-2.34-2.35c-.2-.19-.47-.28-.72-.28M3.28 4L2 5.28l6.5 6.47l-4.5 4.5V20h3.75l4.5-4.5l6.47 6.5L20 20.72l-6.5-6.47l-3.75-3.75zm11.78 1.19l-4.03 4.03l3.75 3.75l4.03-4.03z"></path></svg>
@@ -548,7 +525,7 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
                     ) : predictedValveBoxes[currentFrame] ? (
                         <button 
                             onClick={handleResetValvePosition} 
-                            className='p-2 rounded-sm flex items-center gap-4 transition-colors bg-green-dark disabled:hidden'
+                            className='p-2 rounded-sm flex items-center gap-4 transition-colors bg-red-dark disabled:hidden'
                             title='Reset AI Annotation'
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" width={24} height={24} viewBox="0 0 24 24"><g fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}><path d="M12 3a9 9 0 1 1-5.657 2"></path><path d="M3 4.5h4v4"></path></g></svg>
@@ -561,7 +538,7 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
                             annotated={rects[currentFrame]?.length > 0}
                         >
                             <button 
-                                className='flex items-center bg-green-dark rounded-lg py-2 px-4 space-x-2 text-white'
+                                className='flex items-center bg-red-dark rounded-lg py-2 px-4 space-x-2 text-white'
                                 title="AI Valve Detection Tool"
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" width={24} height={24} viewBox="0 0 24 24"><g fill="none" fillRule="evenodd"><path d="m12.593 23.258l-.011.002l-.071.035l-.02.004l-.014-.004l-.071-.035q-.016-.005-.024.005l-.004.01l-.017.428l.005.02l.01.013l.104.074l.015.004l.012-.004l.104-.074l.012-.016l.004-.017l-.017-.427q-.004-.016-.017-.018m.265-.113l-.013.002l-.185.093l-.01.01l-.003.011l.018.43l.005.012l.008.007l.201.093q.019.005.029-.008l.004-.014l-.034-.614q-.005-.018-.02-.022m-.715.002a.02.02 0 0 0-.027.006l-.006.014l-.034.614q.001.018.017.024l.015-.002l.201-.093l.01-.008l.004-.011l.017-.43l-.003-.012l-.01-.01z"></path><path fill="currentColor" d="M20.131 3.16a3 3 0 0 0-4.242 0l-.707.708l4.95 4.95l.706-.707a3 3 0 0 0 0-4.243l-.707-.707Zm-1.414 7.072l-4.95-4.95l-9.09 9.091a1.5 1.5 0 0 0-.401.724l-1.029 4.455a1 1 0 0 0 1.2 1.2l4.456-1.028a1.5 1.5 0 0 0 .723-.401z"></path></g></svg>
@@ -573,7 +550,7 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
                     {/* Botão de deteção do cálcio */}
                     <button 
                         onClick={handleDetectCalcium} 
-                        className='flex items-center bg-green-dark rounded-lg py-2 px-4 space-x-2 text-white'
+                        className='flex items-center bg-red-dark rounded-lg py-2 px-4 space-x-2 text-white'
                         title='AI Calcium Detection Tool'
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" width={24} height={24} viewBox="0 0 24 24"><g fill="none"><path d="m12.594 23.258l-.012.002l-.071.035l-.02.004l-.014-.004l-.071-.036q-.016-.004-.024.006l-.004.01l-.017.428l.005.02l.01.013l.104.074l.015.004l.012-.004l.104-.074l.012-.016l.004-.017l-.017-.427q-.004-.016-.016-.018m.264-.113l-.014.002l-.184.093l-.01.01l-.003.011l.018.43l.005.012l.008.008l.201.092q.019.005.029-.008l.004-.014l-.034-.614q-.005-.019-.02-.022m-.715.002a.02.02 0 0 0-.027.006l-.006.014l-.034.614q.001.018.017.024l.015-.002l.201-.093l.01-.008l.003-.011l.018-.43l-.003-.012l-.01-.01z"></path><path fill="currentColor" d="M9.107 5.448c.598-1.75 3.016-1.803 3.725-.159l.06.16l.807 2.36a4 4 0 0 0 2.276 2.411l.217.081l2.36.806c1.75.598 1.803 3.016.16 3.725l-.16.06l-2.36.807a4 4 0 0 0-2.412 2.276l-.081.216l-.806 2.361c-.598 1.75-3.016 1.803-3.724.16l-.062-.16l-.806-2.36a4 4 0 0 0-2.276-2.412l-.216-.081l-2.36-.806c-1.751-.598-1.804-3.016-.16-3.724l.16-.062l2.36-.806A4 4 0 0 0 8.22 8.025l.081-.216zM19 2a1 1 0 0 1 .898.56l.048.117l.35 1.026l1.027.35a1 1 0 0 1 .118 1.845l-.118.048l-1.026.35l-.35 1.027a1 1 0 0 1-1.845.117l-.048-.117l-.35-1.026l-1.027-.35a1 1 0 0 1-.118-1.845l.118-.048l1.026-.35l.35-1.027A1 1 0 0 1 19 2"></path></g></svg>
@@ -582,54 +559,6 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
                 </div>
             </div>
             {/* Área de seleção */}
-            <div className="w-full bg-green-soft border-y border-green-pale px-6 py-3 text-sm text-gray-dark">
-                <div className="grid grid-cols-2 gap-4">
-                    <label className="flex flex-col gap-2">
-                        <span className="font-medium">Luminosidade ({brightness.toFixed(2)})</span>
-                        <input
-                            type="range"
-                            min="0.7"
-                            max="1.6"
-                            step="0.05"
-                            value={brightness}
-                            onChange={(event) => handleImageSettingChange('brightness', Number(event.target.value))}
-                        />
-                    </label>
-                    <label className="flex flex-col gap-2">
-                        <span className="font-medium">Contraste ({contrast.toFixed(2)})</span>
-                        <input
-                            type="range"
-                            min="0.7"
-                            max="1.6"
-                            step="0.05"
-                            value={contrast}
-                            onChange={(event) => handleImageSettingChange('contrast', Number(event.target.value))}
-                        />
-                    </label>
-                    <label className="flex flex-col gap-2">
-                        <span className="font-medium">Redução de ruído ({blur.toFixed(1)}px)</span>
-                        <input
-                            type="range"
-                            min="0"
-                            max="4"
-                            step="0.2"
-                            value={blur}
-                            onChange={(event) => handleImageSettingChange('blur', Number(event.target.value))}
-                        />
-                    </label>
-                    <label className="flex flex-col gap-2">
-                        <span className="font-medium">Zoom ({zoom.toFixed(2)}x)</span>
-                        <input
-                            type="range"
-                            min="0.6"
-                            max="2.4"
-                            step="0.05"
-                            value={zoom}
-                            onChange={(event) => handleImageSettingChange('zoom', Number(event.target.value))}
-                        />
-                    </label>
-                </div>
-            </div>
             <div className={`grid-texture relative w-full h-[560px] overflow-hidden bg-gray-soft`}>
                 <Stage
                     width={Math.max(720, window.innerWidth * 2 / 3)} // 840
@@ -639,7 +568,7 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
                     onMouseMove={handleMouseMove}
                     onMouseUp={handleMouseUp}
                     onClick={() => setSelectedRect(null)}
-                    style={{ cursor: cursorType, filter: `brightness(${brightness}) contrast(${contrast}) blur(${blur}px)` }}
+                    style={{ cursor: cursorType }}
                 >
                     <Layer>
                         <Group 
@@ -817,12 +746,12 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
                         </div>
                         
                         <button 
-                            className='relative z-5 w-24 py-1 mt-4 text-center rounded-sm text-lg font-medium bg-green-dark text-white'
+                            className='relative z-5 w-24 py-1 mt-4 text-center rounded-sm text-lg font-medium bg-red-dark text-white'
                             onClick={() => cancelSingleDetection()}
                         >
                             Cancel
                         </button>
-                        <div className='absolute inset-0 bg-green-400/10 backdrop-blur-xs' />
+                        <div className='absolute inset-0 bg-blue-400/10 backdrop-blur-xs' />
                     </div>
                 )}
 
@@ -895,7 +824,7 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
                 )}
             </div>
 
-            <div className='w-full h-28 grid grid-cols-[72%_auto] gap-3 rounded-b-xl bg-green'>
+            <div className='w-full h-28 grid grid-cols-[72%_auto] gap-3 rounded-b-xl bg-red'>
                 {/* Slider com as imagens do paciente */}
                 <AnnotationToolSlider 
                     frames={frames} 
@@ -909,7 +838,7 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
                     {/* Botão de deteção das válvulas em batch */}
                     <button 
                         onClick={handleBatchValvesDetection}
-                        className='p-2 rounded-sm flex items-center justify-center gap-4 transition-colors bg-green-dark disabled:hidden'
+                        className='p-2 rounded-sm flex items-center justify-center gap-4 transition-colors bg-red-dark disabled:hidden'
                         title="Batch Valve Identification Tool"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" width={24} height={24} viewBox="0 0 24 24"><path fill="none" stroke="currentColor" strokeWidth={2} d="M19 15h4V1H9v4m6 14h4V5H5v4M1 23h14V9H1z"></path></svg>

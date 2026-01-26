@@ -12,7 +12,7 @@ export default function Header() {
 
   return (
     <header className="relative left-0 top-0 text-gray-dark">
-      <div className='w-dvw h-[var(--header-height)] flex items-center bg-green-soft border-b-gray-medium border-b-[1px] px-5'>
+      <div className='w-dvw h-[var(--header-height)] flex items-center bg-red-soft border-b-gray-medium border-b-[1px] px-5'>
         <Link to="/">
           <div className="flex items-center gap-4">
             <img src="/calcivision_logo.png" alt="CalciVision" role="img" width={48}/>
@@ -27,7 +27,7 @@ export default function Header() {
             <svg xmlns="http://www.w3.org/2000/svg" width={24} height={24} viewBox="0 0 24 24"><g fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}><path d="M14 8V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2v-2"></path><path d="M9 12h12l-3-3m0 6l3-3"></path></g></svg>
           </button>
           <div className='grid items-center grid-cols-[auto_1fr] grid-rows-2 gap-x-3 max-w-xs'>
-            <div className='row-start-1 row-span-2 aspect-square h-full border-2 border-green rounded-full object-cover object-center overflow-clip'>
+            <div className='row-start-1 row-span-2 aspect-square h-full border-2 border-red rounded-full object-cover object-center overflow-clip'>
               <img 
                 src={avatar} 
                 alt="user" 
@@ -62,7 +62,7 @@ function SearchButton() {
     const [focused, setFocused] = useState(false);
   
     return (
-      <div className={`w-68 mr-4 flex items-center rounded-full outline-1 bg-white transition-all duration-200 ${focused ? 'outline-green outline-2': 'outline-gray-medium-dark'}`}>
+      <div className={`w-68 mr-4 flex items-center rounded-full outline-1 bg-white transition-all duration-200 ${focused ? 'outline-red outline-2': 'outline-gray-medium-dark'}`}>
         <button className='aspect-square h-full grid place-items-center bg-transparent cursor-pointer'>
           <img src={magnifyingGlassIcon} alt="Search" role="icon" />
         </button>

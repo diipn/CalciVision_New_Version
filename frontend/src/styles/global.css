@@ -2,17 +2,11 @@
 @import "tailwindcss";
 
 @theme {
-  --color-green: #2F7D5D; /* Verde principal */
-  --color-green-dark: #205941;  /* Verde escuro */
-  --color-green-light: #E6F6EA; /* Verde claro */
-  --color-green-pale: #D3EBD7;  /* Verde pálido */
-  --color-green-soft: #F2FBF4;  /* Verde suave */
-
-  --color-red: #D65C5C; /* Vermelho para alertas */
-  --color-red-dark: #A33A3A;  /* Vermelho escuro */
+  --color-red: #B54A4A; /* Vermelho principal */
+  --color-red-dark: #832E2E;  /* Vermelho escuro */
   --color-red-light: #FFEAEA; /* Vermelho claro */
-  --color-red-pale: #F7D8D8;  /* Vermelho pálido */
-  --color-red-soft: #FFEFEF;  /* Vermelho suave */
+  --color-red-pale: #EDD3D2;  /* Vermelho pálido */
+  --color-red-soft: #FFCECE;  /* Vermelho suave */
 
   --color-yellow: #FFD06A; /* Amarelo destaque */
 
@@ -22,6 +16,8 @@
   --color-gray-light: #E8E8E8;
   --color-gray-pale: #D9D9D9;
   --color-gray-soft: #F0F0F0;
+
+  --color-green: #A4D65E; /* Verde */
 }
 
 @layer base {
@@ -66,7 +62,7 @@
 
   color-scheme: light dark;
   color: rgba(0, 0, 0, 0.87);
-  background-color: #F2FBF4;
+  background-color: #ffffff;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -94,12 +90,12 @@
 @media (prefers-color-scheme: light) {
   :root {
     color: #213547;
-    background-color: #F2FBF4;
+    background-color: #ffffff;
   }
 }
 
 .login-page {
-  background-color: #F2FBF4;
+  background-color: #FFEAEA; /* Azul */
   margin: 0;
   display: flex;
   height: 100vh;
@@ -122,10 +118,11 @@
 }
 
 .swiper-button-prev, .swiper-button-next {
-  color: var(--color-green-pale) !important
+  color: var(--color-red-pale) !important
 }
 
 /* interpolate-size é uma propriedade recente que ainda não é suportada pelo React */
 .patient-row-menu {
   interpolate-size: allow-keywords;
 }
+

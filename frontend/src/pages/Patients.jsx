@@ -75,7 +75,7 @@ export default function Patients() {
       <div className='flex justify-start items-center mb-5'>
         <div className='mr-auto flex items-center gap-4'>
           <button
-            className='w-fit py-1 px-3 flex items-center gap-2 rounded-lg bg-green text-white'
+            className='w-fit py-1 px-3 flex items-center gap-2 rounded-lg bg-red text-white'
             onClick={() => setShowRegister(true)}
           >
             Add New Patient
@@ -100,7 +100,7 @@ export default function Patients() {
               )}
             onConfirm={handlePatientScreening}
           >
-            <button className='w-fit py-1 px-3 flex items-center gap-2 rounded-lg bg-green text-white'>
+            <button className='w-fit py-1 px-3 flex items-center gap-2 rounded-lg bg-red text-white'>
               Patient Screening
               <img className='w-5 h-5 object-contain' src={patientScreeningIcon} alt="Patient Screening" role="icon" />
             </button>

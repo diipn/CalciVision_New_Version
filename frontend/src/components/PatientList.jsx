@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import UploadDicomFiles from '@components/UploadDicomFiles';
 import api, { deletePatient, deleteReport } from '../api';
 import AlertDialogMenu from './AlertDialogMenu';
@@ -144,7 +143,7 @@ function PatientRow({ patient, defaultState, reloadTable }) {
                     </AlertDialogMenu>
                 </td>
             </tr>
-            <tr className='bg-green-light'>
+            <tr className='bg-red-light'>
                 <td colSpan={7} className='p-0! text-left min-w-8'>
                     <div className={`patient-row-menu transition-[height] ease-out duration-500 overflow-hidden ${isOpen ? 'h-auto' : 'h-0'}`}>
                         <div className="grid xl:grid-cols-[60%_40%] xl:grid-rows-1 grid-rows-2 gap-12 px-15! py-4! border-b-2 border-b-gray-medium">
@@ -190,21 +189,6 @@ function PatientRow({ patient, defaultState, reloadTable }) {
 
 function EchocardiogramsTable({ patient, reloadTable }) {
 
-    const navigate = useNavigate();
-    const [selectedExams, setSelectedExams] = useState([]);
-
-    const handleToggleExam = (examId) => {
-        setSelectedExams((prev) => {
-            if (prev.includes(examId)) {
-                return prev.filter((id) => id !== examId);
-            }
-            if (prev.length >= 2) {
-                return prev;
-            }
-            return [...prev, examId];
-        });
-    };
-
     const handleDeleteEchocardiogram = async (echo) => {
         try {
             await api.delete(`/api/patient/${patient.id}/echocardiogram/${echo.id}/delete/`)
@@ -215,108 +199,51 @@ function EchocardiogramsTable({ patient, reloadTable }) {
     }
     
     return (
-        <div>
-            <div className='flex items-center justify-between mb-3 text-sm text-gray-medium-dark'>
-                <span>Selecione dois exames para comparar.</span>
-                <button
-                    className='bg-green-dark text-white px-3 py-1 rounded disabled:opacity-50'
-                    onClick={() => navigate(`/patients/${patient.id}/compare/${selectedExams[0]}/${selectedExams[1]}`)}
-                    disabled={selectedExams.length !== 2}
-                >
-                    Comparar exames
-                </button>
-            </div>
-            <table className='table-fixed w-full border-collapse'>
-                <thead>
-                    <tr className=''>
-                        <th className="w-1/3 px-4 py-1 text-left truncate border-b-2">Exame</th>
-                        <th className="w-1/6 px-4 py-1 text-left truncate border-b-2">Data</th>
-                        <th className="w-1/8 px-4 py-1 text-left truncate border-b-2">
-                            <span className="inline-flex items-center gap-2">
-                                VO
-                                <span
-                                    className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-green-100 text-green-700 text-xs font-semibold"
-                                    title="A VO representa o grau estimado de calcificação e serve para comparar exames ao longo do tempo."
+        <table className='table-fixed w-full border-collapse'>
+            <thead>
+                <tr className=''>
+                    <th className="w-2/7 px-4 py-1 text-left truncate border-b-2">Name</th>
+                    <th className="w-1/5 px-4 py-1 text-left truncate border-b-2">Status</th>
+                    <th className="w-1/4 px-4 py-1 text-left truncate border-b-2">Uploaded</th>
+                    <th className="w-1/8 pl-8 py-1"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {patient.echocardiograms?.map((echo, index) =>
+                    <tr key={index}>
+                        <td className="px-4 py-1"><strong>{echo.description}</strong></td>
+                        <td className="px-4 py-1">
+                            <div className={`w-28 py-[3px] text-sm bg-white text-center rounded-md ${echo.status === 'EVALUATED' ? 'text-green-600' : echo.status === 'IN_PROGRESS' ? 'text-amber-600' : 'text-red'}`}>
+                                {formatStatus(echo.status)}
+                            </div>
+                        </td>
+                        <td className="px-4 py-1"><em>{new Date(echo.uploaded_at).toLocaleString('pt-PT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</em></td>
+                        <td>
+                            <div className='flex justify-end gap-2'>
+                                <button 
+                                    className='block bg-blue-500 rounded-lg p-[6px] text-white text-sm'
+                                    onClick={() => window.open(`/analyse_aortic_valve/${patient.id}/${echo.id}`, '_blank')}
                                 >
-                                    ?
-                                </span>
-                            </span>
-                        </th>
-                        <th className="w-1/6 px-4 py-1 text-left truncate border-b-2">
-                            Risco
-                        </th>
-                        <th className="w-1/6 px-4 py-1 text-left truncate border-b-2">Status</th>
-                        <th className="w-1/8 px-4 py-1 text-center truncate border-b-2">Comparar</th>
-                        <th className="w-1/8 pl-8 py-1"></th>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width={16} height={16} viewBox="0 0 24 24"><path fill="currentColor" d="m18.988 2.012l3 3L19.701 7.3l-3-3zM8 16h3l7.287-7.287l-3-3L8 13z"/><path fill="currentColor" d="M19 19H8.158c-.026 0-.053.01-.079.01c-.033 0-.066-.009-.1-.01H5V5h6.847l2-2H5c-1.103 0-2 .896-2 2v14c0 1.104.897 2 2 2h14a2 2 0 0 0 2-2v-8.668l-2 2z"/></svg>
+                                </button>
+                                <AlertDialogMenu
+                                    heading='Delete Echocardiogram'
+                                    content={`Are you sure you want to delete echocariogram "${echo.description}"? This action cannot be undone.`}
+                                    onConfirm={() => handleDeleteEchocardiogram(echo)}
+                                >
+                                    <button className='block bg-red rounded-lg p-[6px] text-white text-sm'>
+                                        <svg xmlns="http://www.w3.org/2000/svg" width={16} height={16} viewBox="0 0 24 24"><path fill="currentColor" fillRule="evenodd" d="M8.106 2.553A1 1 0 0 1 9 2h6a1 1 0 0 1 .894.553L17.618 6H20a1 1 0 1 1 0 2h-1v11a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V8H4a1 1 0 0 1 0-2h2.382zM14.382 4l1 2H8.618l1-2zM11 11a1 1 0 1 0-2 0v6a1 1 0 1 0 2 0zm4 0a1 1 0 1 0-2 0v6a1 1 0 1 0 2 0z" clipRule="evenodd"></path></svg>
+                                    </button>
+                                </AlertDialogMenu>
+                            </div>
+                        </td>
                     </tr>
-                </thead>
-                <tbody>
-                    {patient.echocardiograms?.map((echo, index) => {
-                        const risk = getRiskBadge(echo.vo);
-                        return (
-                            <tr key={index}>
-                                <td className="px-4 py-1"><strong>{echo.description}</strong></td>
-                                <td className="px-4 py-1"><em>{new Date(echo.date || echo.uploaded_at).toLocaleString('pt-PT', { day: '2-digit', month: '2-digit', year: 'numeric' })}</em></td>
-                                <td className="px-4 py-1">{echo.vo !== undefined ? `${Math.round(echo.vo * 100)}%` : '—'}</td>
-                                <td className="px-4 py-1">
-                                    {risk && (
-                                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${risk.className}`}>
-                                            {risk.label}
-                                        </span>
-                                    )}
-                                </td>
-                                <td className="px-4 py-1">
-                                    <div className={`w-28 py-[3px] text-sm bg-white text-center rounded-md ${echo.status === 'EVALUATED' ? 'text-green-600' : echo.status === 'IN_PROGRESS' ? 'text-amber-600' : 'text-red'}`}>
-                                        {formatStatus(echo.status)}
-                                    </div>
-                                </td>
-                                <td className="px-4 py-1 text-center">
-                                    <input
-                                        type="checkbox"
-                                        checked={selectedExams.includes(echo.id)}
-                                        onChange={() => handleToggleExam(echo.id)}
-                                        disabled={!selectedExams.includes(echo.id) && selectedExams.length >= 2}
-                                    />
-                                </td>
-                                <td>
-                                    <div className='flex justify-end gap-2'>
-                                        <button 
-                                            className='block bg-green rounded-lg p-[6px] text-white text-sm'
-                                            onClick={() => window.open(`/analyse_aortic_valve/${patient.id}/${echo.id}`, '_blank')}
-                                        >
-                                            <svg xmlns="http://www.w3.org/2000/svg" width={16} height={16} viewBox="0 0 24 24"><path fill="currentColor" d="m18.988 2.012l3 3L19.701 7.3l-3-3zM8 16h3l7.287-7.287l-3-3L8 13z"/><path fill="currentColor" d="M19 19H8.158c-.026 0-.053.01-.079.01c-.033 0-.066-.009-.1-.01H5V5h6.847l2-2H5c-1.103 0-2 .896-2 2v14c0 1.104.897 2 2 2h14a2 2 0 0 0 2-2v-8.668l-2 2z"/></svg>
-                                        </button>
-                                        <AlertDialogMenu
-                                            heading='Delete Echocardiogram'
-                                            content={`Are you sure you want to delete echocariogram "${echo.description}"? This action cannot be undone.`}
-                                            onConfirm={() => handleDeleteEchocardiogram(echo)}
-                                        >
-                                            <button className='block bg-red rounded-lg p-[6px] text-white text-sm'>
-                                                <svg xmlns="http://www.w3.org/2000/svg" width={16} height={16} viewBox="0 0 24 24"><path fill="currentColor" fillRule="evenodd" d="M8.106 2.553A1 1 0 0 1 9 2h6a1 1 0 0 1 .894.553L17.618 6H20a1 1 0 1 1 0 2h-1v11a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V8H4a1 1 0 0 1 0-2h2.382zM14.382 4l1 2H8.618l1-2zM11 11a1 1 0 1 0-2 0v6a1 1 0 1 0 2 0zm4 0a1 1 0 1 0-2 0v6a1 1 0 1 0 2 0z" clipRule="evenodd"></path></svg>
-                                            </button>
-                                        </AlertDialogMenu>
-                                    </div>
-                                </td>
-                            </tr>
-                        );
-                    })}
-                </tbody>
-            </table>
-        </div>
+                )}
+            </tbody>
+        </table>
     )
 }
 
 const formatStatus = (text) => {
     return text.replace('_', ' ').toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 }
-
-const getRiskBadge = (vo) => {
-    if (vo === undefined || vo === null) return null;
-    if (vo < 0.33) {
-        return { label: 'Baixo', className: 'bg-green-600 text-white' };
-    }
-    if (vo < 0.66) {
-        return { label: 'Médio', className: 'bg-orange-500 text-white' };
-    }
-    return { label: 'Alto', className: 'bg-red text-white' };
-};

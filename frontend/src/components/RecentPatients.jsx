@@ -34,13 +34,15 @@ const RecentPatients = () => {
                 </button>
             </div>
             <ul>
-                {patients.map((patient) => (
+                {patients.map((patient) => {
+                    const gender = patient.gender || patient.sex;
+                    return (
                     <li 
                         key={patient.id} 
-                        className={`${patient.status === 'EVALUATED' ? 'bg-green-200' : patient.status === 'PENDING' ? 'bg-red-soft' : 'bg-orange-200'} mt-4 rounded-lg p-4 shadow-md flex items-center gap-4`}
-                    >                        <div className='border-2 border-red rounded-full overflow-clip w-14 h-14'>
+                        className={`${patient.status === 'EVALUATED' ? 'bg-green-200' : patient.status === 'PENDING' ? 'bg-green-soft' : 'bg-orange-200'} mt-4 rounded-lg p-4 shadow-md flex items-center gap-4`}
+                    >                        <div className='border-2 border-green rounded-full overflow-clip w-14 h-14'>
                             <img
-                                src={patient.gender === 'M' ? userMen : patient.gender === 'F' ? userWomen : patient.gender === 'O' ? userOther : userPatient}
+                                src={gender === 'M' ? userMen : gender === 'F' ? userWomen : gender === 'O' ? userOther : userPatient}
                                 alt={patient.name}
                                 role='img'
                                 className='w-full h-full object-cover'
@@ -63,7 +65,7 @@ const RecentPatients = () => {
                             <svg xmlns="http://www.w3.org/2000/svg" width={24} height={24} viewBox="0 0 24 24"><path fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m10 17l5-5m0 0l-5-5"></path></svg>
                         </button>
                     </li>
-                ))}
+                )})}
             </ul>
         </div>
     );

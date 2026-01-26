@@ -84,7 +84,7 @@ const PatientRegister = ({ onClose }) => {
       >
         <h2 className="text-center font-bold mb-6">Add New Patient</h2>
         <div className="flex justify-center">
-          <div className="items-center inline-block w-300 border-t-[3px] border-red-dark" />
+          <div className="items-center inline-block w-300 border-t-[3px] border-green-dark" />
         </div>
 
         <div className="relative">
@@ -323,7 +323,7 @@ const PatientRegister = ({ onClose }) => {
         </div>
         <div className="flex gap-4">
           <button
-            className="bg-red h-10 w-40 uppercase text-white rounded-md"
+            className="bg-green h-10 w-40 uppercase text-white rounded-md"
             type="submit"
             disabled={loading}
           >

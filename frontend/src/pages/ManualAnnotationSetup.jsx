@@ -44,7 +44,7 @@ export default function ManualAnnotationSetup() {
                 <label htmlFor="patient">Patient</label>
                 <select 
                     name="patient" 
-                    className="px-4 py-2 border-2 border-red-dark w-fit"
+                    className="px-4 py-2 border-2 border-green-dark w-fit"
                     onChange={(e) => setSelectedPatientId(e.target.value)}
                     value={selectedPatientId}
                 >
@@ -62,7 +62,7 @@ export default function ManualAnnotationSetup() {
                     <label htmlFor="echocardiogram">Echocardiography</label>
                     <select
                         name="echocardiogram" 
-                        className="px-4 py-2 border-2 border-red-dark w-fit"
+                        className="px-4 py-2 border-2 border-green-dark w-fit"
                         onChange={(e) => setSelectedEchoId(e.target.value)}
                         value={selectedEchoId}
                     >
@@ -78,7 +78,7 @@ export default function ManualAnnotationSetup() {
 
             <button 
                 onClick={handleSubmit} 
-                className={`rounded-lg mt-8 py-1 px-4 text-m text-white ${selectedPatientId && selectedEchoId ? 'bg-red-dark' : 'bg-gray-medium'}`}
+                className={`rounded-lg mt-8 py-1 px-4 text-m text-white ${selectedPatientId && selectedEchoId ? 'bg-green-dark' : 'bg-gray-medium'}`}
             >
                 Continue
             </button>

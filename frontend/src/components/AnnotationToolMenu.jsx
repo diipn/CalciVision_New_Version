@@ -8,13 +8,20 @@ import { Switch, Tooltip } from "radix-ui";
 import ReportPDF from "./ReportPDF";
 import { pdf } from "@react-pdf/renderer";
 
-const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCalcification, calcificationStatus, setCalcificationStatus, predictionHistory, patient, echoId }) => {
+const AnnotationToolMenu = ({ frames, currentFrame, setCurrentFrame, rects, calcification, setCalcification, calcificationStatus, setCalcificationStatus, predictionHistory, patient, echoId, valveConfirmations, calciumScore, reportText, setReportText }) => {
   const [echoName, setEchoName] = useState("");
   const [autoReport, setAutoReport] = useState(true);
+  const [statusMessage, setStatusMessage] = useState(null);
   const form = useRef(null);
   const { user } = useUser();
   const navigate = useNavigate();
   const { setUnsavedChanges, hasUnsavedChanges } = useUnsavedStore();
+
+  useEffect(() => {
+    if (hasUnsavedChanges) {
+      setStatusMessage(null);
+    }
+  }, [hasUnsavedChanges]);
 
   useEffect(() => {
     if (patient) {
@@ -43,8 +50,9 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
         });
 
         // Se os resultados do cálcio já estiverem disponíveis, atualiza o status de calcificação
-        savedPrediction.results?.binary_classification &&
+        if (savedPrediction.results?.binary_classification !== undefined && savedPrediction.results?.binary_classification !== null) {
           setCalcificationStatus(savedPrediction.results.binary_classification);
+        }
 
         console.log("encontrado no histórico");
       } else {
@@ -84,12 +92,24 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
       await api.post(
         `/api/patient/${patient.id}/echocardiogram/${echoId}/submit/`,
         { results, completed, echoName }
-      );      // Gera o relatório automaticamente
+      );
+
+      if (calciumScore !== null && calciumScore !== undefined) {
+        const scoreValue = Number(calciumScore);
+        localStorage.setItem(`calciumScore:${patient.id}`, scoreValue.toFixed(2));
+        localStorage.setItem(`calciumScore:${patient.id}:${echoId}`, scoreValue.toFixed(2));
+      }
+
+      if (reportText) {
+        localStorage.setItem(`reportText:${patient.id}:${echoId}`, reportText);
+      }
+
+      // Gera o relatório automaticamente
       if (autoReport && completed) {
         try {
           const echoData = await getEchoResults(patient.id);
 
-          const pdfBlob = await generatePdfBlob(echoData, patient, user);
+          const pdfBlob = await generatePdfBlob(echoData, patient, user, calciumScore, reportText);
           const formData = new FormData();
           formData.append("pdf_file", pdfBlob, `report_${patient.id}.pdf`);
 
@@ -100,15 +120,16 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
       }
 
       setUnsavedChanges(false);
+      setStatusMessage("saved");
       completed && navigate(`/patients?patient=${patient.id}`);
     } catch (error) {
       console.error("Erro na submissão dos resultados", error);
     }
   };
 
-  const generatePdfBlob = async (echoData, selectedPatient, user) => {
+  const generatePdfBlob = async (echoData, selectedPatient, user, scoreValue, notes) => {
     const doc = (
-      <ReportPDF data={echoData} patient={selectedPatient} medico={user} />
+      <ReportPDF data={echoData} patient={selectedPatient} medico={user} calciumScore={scoreValue} reportText={notes} />
     );
     const asPdf = pdf([]);
     asPdf.updateContainer(doc);
@@ -127,6 +148,7 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
       };
       return updatedCalcification;
     });
+    setUnsavedChanges(true);
   };
 
   const framesWithValve = rects.filter(
@@ -138,25 +160,29 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
   const readyToSubmit = rects.some(
     (frameRects, idx) => frameRects.length > 0 && calcification[idx] !== null
   );
+  const aiResult = calcification[currentFrame];
+  const aiHasResult = aiResult?.is_calcification_generated && aiResult?.binary_classification !== undefined && aiResult?.binary_classification !== null;
+  const valveIdentified = rects[currentFrame]?.length > 0;
+  const valveConfirmed = valveConfirmations?.[currentFrame] === true;
+  const calcificationDone = calcification[currentFrame]?.binary_classification !== undefined && calcification[currentFrame]?.binary_classification !== null;
 
   return (
     <div className="bg-gray-light p-3 rounded-lg w-full border-t-6 border-red-dark mb-4">
       <form id="form" ref={form} className="p-2">
         <div>
           <h3 className="mb-2">{patient?.name}</h3>
-          <p>
-            Select the area of interest on the image by drawing a box at the
-            location of the valve.
+          <p className="text-sm text-gray-700">
+            Identifique a válvula aórtica, confirme o contorno e valide a calcificação.
           </p>
         </div>
 
         <label htmlFor="imageName" className="block my-4">
-          <div className="mb-1 text-gray-medium">Echocardiogram</div>
+          <div className="mb-1 text-gray-medium">Ecodoppler</div>
           <input
             type="text"
             name="imageName"
             id="imageName"
-            placeholder="Name this echocardiogram..."
+            placeholder="Nome do exame..."
             value={echoName}
             onChange={(e) => setEchoName(e.target.value)}
             className="block w-full border rounded-sm border-gray-dark bg-gray-soft py-1 px-3"
@@ -164,59 +190,96 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
         </label>
 
         <div className="space-y-4 text-sm text-gray-700">
-          <h4 className="mt-6">Progress Overview</h4>
+          <h4 className="mt-6">Resumo de progresso</h4>
           <ul className="space-y-1">
-            <li>
-              <span className="text-gray-600">Total frames:</span>
-              <span className="ml-2 font-medium text-gray-900">
-                {frames.length}
-              </span>
+            <li className="flex items-center gap-2">
+              <span>{valveIdentified ? "✔" : "⏳"}</span>
+              <span>Válvula identificada</span>
             </li>
-            <li>
-              <span className="text-gray-600">Valve identified:</span>
-              <span className="ml-2 font-medium text-gray-900">
-                {framesWithValve}
-              </span>
+            <li className="flex items-center gap-2">
+              <span>{valveConfirmed ? "✔" : "⏳"}</span>
+              <span>Anotação concluída</span>
             </li>
-            <li>
-              <span className="text-gray-600">Completed annotations:</span>
-              <span className="ml-2 font-medium text-gray-900">
-                {framesCompleted}
-              </span>
+            <li className="flex items-center gap-2">
+              <span>{calcificationDone ? "✔" : "⏳"}</span>
+              <span>{calcificationDone ? "Calcificação analisada" : "Calcificação por analisar"}</span>
             </li>
           </ul>
 
-          {readyToSubmit && (
-            <div
-              className="flex items-center gap-2 rounded-md bg-green-50 p-2 text-green-700 ring-1 ring-green-200"
-              role="alert"
-            >
-              <div className="p-1 rounded-full bg-green-100 text-green-600">
-                <svg xmlns="http://www.w3.org/2000/svg" width={16} height={16} viewBox="0 0 1024 1024" fill="currentColor">
-                  <path d="M512 64a448 448 0 1 1 0 896a448 448 0 0 1 0-896m-55.808 536.384l-99.52-99.584a38.4 38.4 0 1 0-54.336 54.336l126.72 126.72a38.27 38.27 0 0 0 54.336 0l262.4-262.464a38.4 38.4 0 1 0-54.272-54.336z" />
-                </svg>
-              </div>
-              <span className="font-medium">Ready to submit.</span>
+          <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+            <div>Total de imagens: <strong className="text-gray-900">{frames.length}</strong></div>
+            <div>Imagens com válvula: <strong className="text-gray-900">{framesWithValve}</strong></div>
+            <div>Anotações completas: <strong className="text-gray-900">{framesCompleted}</strong></div>
+            <div>
+              Imagem atual:
+              <select
+                className="ml-2 rounded border border-gray-pale bg-white px-2 py-1"
+                value={currentFrame}
+                onChange={(e) => setCurrentFrame(Number(e.target.value))}
+              >
+                {frames.map((_, index) => (
+                  <option key={index} value={index}>{`Frame ${index + 1}`}</option>
+                ))}
+              </select>
             </div>
-          )}
+          </div>
 
-          {hasUnsavedChanges && (
+          {(statusMessage === "saved" || hasUnsavedChanges || readyToSubmit) && (
             <div
-              className="flex items-center gap-2 rounded-md bg-orange-50 p-2 text-orange-700 ring-1 ring-orange-200"
+              className={`flex items-center gap-2 rounded-md p-2 ring-1 ${
+                statusMessage === "saved"
+                  ? "bg-green-50 text-green-700 ring-green-200"
+                  : hasUnsavedChanges
+                  ? "bg-orange-50 text-orange-700 ring-orange-200"
+                  : "bg-green-50 text-green-700 ring-green-200"
+              }`}
               role="alert"
             >
-              <div className="p-1 rounded-full bg-orange-100 text-orange-600">
-                <svg xmlns="http://www.w3.org/2000/svg" width={16} height={16} viewBox="0 0 1024 1024"fill="currentColor">
-                  <path d="M512 64a448 448 0 1 1 0 896a448 448 0 0 1 0-896m0 192a58.43 58.43 0 0 0-58.24 63.744l23.36 256.384a35.072 35.072 0 0 0 69.76 0l23.296-256.384A58.43 58.43 0 0 0 512 256m0 512a51.2 51.2 0 1 0 0-102.4a51.2 51.2 0 0 0 0 102.4" />
+              <div className={`p-1 rounded-full ${statusMessage === "saved" ? "bg-green-100 text-green-600" : hasUnsavedChanges ? "bg-orange-100 text-orange-600" : "bg-green-100 text-green-600"}`}>
+                <svg xmlns="http://www.w3.org/2000/svg" width={16} height={16} viewBox="0 0 1024 1024" fill="currentColor">
+                  {statusMessage === "saved" ? (
+                    <path d="M512 64a448 448 0 1 1 0 896a448 448 0 0 1 0-896m-55.808 536.384l-99.52-99.584a38.4 38.4 0 1 0-54.336 54.336l126.72 126.72a38.27 38.27 0 0 0 54.336 0l262.4-262.464a38.4 38.4 0 1 0-54.272-54.336z" />
+                  ) : (
+                    <path d="M512 64a448 448 0 1 1 0 896a448 448 0 0 1 0-896m0 192a58.43 58.43 0 0 0-58.24 63.744l23.36 256.384a35.072 35.072 0 0 0 69.76 0l23.296-256.384A58.43 58.43 0 0 0 512 256m0 512a51.2 51.2 0 1 0 0-102.4a51.2 51.2 0 0 0 0 102.4" />
+                  )}
                 </svg>
               </div>
-              <span className="font-medium">You have unsaved changes.</span>
+              <span className="font-medium">
+                {statusMessage === "saved"
+                  ? "Análise guardada com sucesso"
+                  : hasUnsavedChanges
+                  ? "Alterações não guardadas"
+                  : "Pronto para guardar"}
+              </span>
             </div>
           )}
         </div>
 
-        <h4 className="mt-4">Calcification</h4>
-        <div className="grid grid-cols-2 justify-center gap-3 mt-4">
+        <h4 className="mt-6">Calcificação</h4>
+        <div className="mt-4 space-y-3">
+          <div className="rounded-md border border-gray-pale bg-white p-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-gray-500">Resultado da IA</p>
+                <strong className="text-base">
+                  {aiHasResult
+                    ? aiResult.binary_classification
+                      ? "Calcificada"
+                      : "Não calcificada"
+                    : "Sem resultado automático"}
+                </strong>
+              </div>
+              <div className="text-right text-sm" title="Valor quantitativo indicativo do grau de calcificação (protótipo)">
+                <span className="text-gray-500">Calcium score: </span>
+                <strong>
+                  {Number.isFinite(calciumScore) ? calciumScore.toFixed(2) : "--"}
+                </strong>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-md border border-gray-pale bg-white p-3">
+            <p className="text-xs uppercase tracking-[0.2em] text-gray-500 mb-3">Confirmação clínica</p>
+            <div className="grid grid-cols-2 justify-center gap-3">
           <button
             type="button"
             className={`relative h-12 rounded flex justify-center items-center ${
@@ -240,7 +303,7 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
                   </svg>
                 </div>
               ))}
-            Calcified
+            Calcificada
           </button>
 
           <button
@@ -266,8 +329,10 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
                   </svg>
                 </div>
               ))}
-            Not Calcified
+            Não calcificada
           </button>
+            </div>
+          </div>
         </div>
         <div className="my-4">
           {/* Exibe a mensagem de acordo com o status de calcificação e se é gerado pelo algoritmo ou pelo médico */}
@@ -276,31 +341,59 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
             (calcification[currentFrame]?.is_calcification_generated ? (
               calcification[currentFrame].binary_classification ? (
                 <strong>
-                  The algorithm detected calcium deposits in the delimited area.
+                  A IA detetou calcificação na área delimitada.
                 </strong>
               ) : (
                 <strong>
-                  The algorithm did not detect calcium deposits in the delimited
-                  area.
+                  A IA não detetou calcificação na área delimitada.
                 </strong>
               )
             ) : calcification[currentFrame]?.binary_classification ? (
               <strong>
-                Dr. {user?.first_name + " " + user?.last_name} marked the valve
-                area as calcified.
+                Dr. {user?.first_name + " " + user?.last_name} confirmou a válvula como calcificada.
               </strong>
             ) : (
               <strong>
-                Dr. {user?.first_name + " " + user?.last_name} marked the valve
-                area as not calcified.
+                Dr. {user?.first_name + " " + user?.last_name} confirmou a válvula como não calcificada.
               </strong>
             ))}
+        </div>
+
+        <div className="mt-6">
+          <h4 className="mb-2">Relatório (rascunho)</h4>
+          <textarea
+            rows={4}
+            value={reportText}
+            onChange={(e) => {
+              setReportText(e.target.value);
+              setUnsavedChanges(true);
+            }}
+            placeholder="Escreva observações clínicas ou edite o texto sugerido..."
+            className="w-full rounded border border-gray-pale bg-white p-3 text-sm"
+          />
+          <button
+            type="button"
+            className="mt-3 rounded-lg bg-red-dark px-4 py-2 text-white"
+            onClick={async () => {
+              if (!patient) return;
+              const echoData = await getEchoResults(patient.id);
+              const blob = await generatePdfBlob(echoData, patient, user, calciumScore, reportText);
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = `relatorio_${patient.id}.pdf`;
+              link.click();
+              URL.revokeObjectURL(url);
+            }}
+          >
+            Exportar PDF (simulado)
+          </button>
         </div>
       </form>
 
       <div className="flex items-center gap-4 py-2">
         <label className="leading-0" htmlFor="auto-report">
-          Generate report automatically
+          Gerar relatório automaticamente
         </label>
 
         <Switch.Root
@@ -327,10 +420,9 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
                 className="select-none max-w-82 rounded bg-white px-[15px] py-2.5 text-sm leading-none text-gray-medium-dark shadow-[hsl(206_22%_7%_/_35%)_0px_10px_38px_-10px,_hsl(206_22%_7%_/_20%)_0px_10px_20px_-15px] will-change-[transform,opacity] data-[state=delayed-open]:data-[side=bottom]:animate-slideUpAndFade data-[state=delayed-open]:data-[side=left]:animate-slideRightAndFade data-[state=delayed-open]:data-[side=right]:animate-slideLeftAndFade data-[state=delayed-open]:data-[side=top]:animate-slideDownAndFade"
                 sideOffset={5}
               >
-                Indicates whether or not the clinical report will be
-                automatically generated when results are submitted. If so, the
-                report will be available in Records and in the respective
-                patient's menu.
+                Indica se o relatório clínico será gerado automaticamente ao
+                submeter os resultados. Ficará disponível em Registos e no menu
+                do respetivo paciente.
                 <Tooltip.Arrow className="fill-white" />
               </Tooltip.Content>
             </Tooltip.Portal>
@@ -341,40 +433,40 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
       <div className="w-full flex gap-2 mt-8">
         {/* Botão de cancelar análise e voltar atrás (com confirmação) */}
         <AlertDialog
-          heading="Discard changes?"
-          text="Are you sure you want to go back? Any unsaved data will be lost!"
+          heading="Descartar alterações?"
+          text="Tem a certeza de que quer sair? As alterações não guardadas serão perdidas."
           onConfirm={() => {
             setUnsavedChanges(false);
             navigate(`/select_echo?patient=${patient.id}&echo=${echoId}`);
           }}
         >
           <button className="grid place-items-center basis-24 border-red border-2 rounded-lg py-2 text-gray-dark">
-            Cancel
+            Cancelar
           </button>
         </AlertDialog>
 
         {/* Botão de salvar novos dados (com confirmação) */}
         <AlertDialog
-          heading="Save new changes?"
-          text="This action cannot be undone! The current annotation data will be overwritten with the new changes."
+          heading="Guardar alterações?"
+          text="Esta ação irá substituir os dados atuais de anotação."
           onConfirm={() => handleUpdateEcho(false)}
         >
           <button className="grid place-items-center basis-24 bg-red rounded-lg py-2 text-white">
-            Save
+            Guardar
           </button>
         </AlertDialog>
 
         {/* Botão de salvar novos dados e marcar ecocardiograma como concluído (com confirmação) */}
         <AlertDialog
-          heading="Submit echocardiography?"
-          text={`This action will formalize ${patient?.name}'s analysis results and mark the echocardiography as complete.`}
+          heading="Submeter ecocardiograma?"
+          text={`Esta ação finaliza a análise de ${patient?.name} e marca o exame como concluído.`}
           onConfirm={() => handleUpdateEcho(true)}
         >
           <button className="basis-50 flex items-center justify-center gap-2 ml-auto bg-red-dark rounded-lg py-2 px-6 text-white">
             <svg xmlns="http://www.w3.org/2000/svg" width={20} height={20} viewBox="0 0 16 16">
               <path fill="currentColor" fillRule="evenodd" d="M2 2.5a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 .5.5V7h-1V3H3v10h2.005v1H2.5a.5.5 0 0 1-.5-.5zm11.994 6.832l-4.52 4.519a.5.5 0 0 1-.706 0l-2.51-2.51l.706-.708l2.157 2.157l4.166-4.166z" clipRule="evenodd"></path>
             </svg>
-            Ready to Submit
+            Confirmar & Guardar
           </button>
         </AlertDialog>
       </div>

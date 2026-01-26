@@ -6,11 +6,11 @@ const styles = StyleSheet.create({
     fontFamily: 'Helvetica',
     fontSize: 9,
     lineHeight: 1.15,
-    color: '#292121'
+    color: '#24332B'
   },
   header: {
     marginBottom: 10,
-    borderBottom: '1.5 solid #B54A4A',
+    borderBottom: '1.5 solid #5E8C6A',
     paddingBottom: 5
   },
   title: {
@@ -18,7 +18,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
     marginBottom: 3,
-    color: '#B54A4A',
+    color: '#5E8C6A',
     letterSpacing: 0.3
   },
   subtitle: {
@@ -27,23 +27,23 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 2,
     marginBottom: 6,
-    color: '#727272',
+    color: '#6C7A72',
     textTransform: 'uppercase',
     letterSpacing: 0.5
   },
   patientInfo: {
     marginBottom: 10,
     padding: 7,
-    backgroundColor: '#FFEAEA',
+    backgroundColor: '#E9F2EC',
     borderRadius: 3,
-    border: '1 solid #EDD3D2'
+    border: '1 solid #D4E4D8'
   },
   sectionTitle: {
     fontSize: 9.5,
     fontWeight: 'bold',
     marginTop: 6,
     marginBottom: 4,
-    color: '#B54A4A',
+    color: '#5E8C6A',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     borderBottom: '1 solid #E8E8E8',
@@ -62,9 +62,9 @@ const styles = StyleSheet.create({
   conclusion: {
     marginTop: 6,
     padding: 7,
-    backgroundColor: '#F0F0F0',
+    backgroundColor: '#F3F6F4',
     borderRadius: 3,
-    border: '1 solid #D9D9D9'
+    border: '1 solid #C8D2CB'
   },
   signature: {
     marginTop: 12,
@@ -75,25 +75,25 @@ const styles = StyleSheet.create({
   date: {
     textAlign: 'right',
     fontSize: 8,
-    color: '#727272',
+    color: '#6C7A72',
     marginBottom: 2
   },
   institutionHeader: {
     textAlign: 'center',
     marginBottom: 8,
     padding: 5,
-    backgroundColor: '#F0F0F0',
+    backgroundColor: '#F3F6F4',
     borderRadius: 3
   },
   institutionName: {
     fontSize: 10,
     fontWeight: 'bold',
-    color: '#292121',
+    color: '#24332B',
     marginBottom: 1
   },
   institutionDetails: {
     fontSize: 7.5,
-    color: '#727272'
+    color: '#6C7A72'
   },
   patientRow: {
     flexDirection: 'row',
@@ -103,12 +103,12 @@ const styles = StyleSheet.create({
   patientLabel: {
     fontSize: 8.5,
     fontWeight: 'bold',
-    color: '#292121',
+    color: '#24332B',
     width: '35%'
   },
   patientValue: {
     fontSize: 8.5,
-    color: '#292121',
+    color: '#24332B',
     width: '65%'
   },
   findingItem: {
@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
   },
   findingBullet: {
     fontSize: 8.5,
-    color: '#B54A4A',
+    color: '#5E8C6A',
     marginRight: 4,
     marginTop: 1
   },
@@ -128,7 +128,7 @@ const styles = StyleSheet.create({
     lineHeight: 1.15
   },
   highlight: {
-    backgroundColor: '#FFD06A',
+    backgroundColor: '#D8C89A',
     padding: 1,
     borderRadius: 1
   },
@@ -149,15 +149,18 @@ const styles = StyleSheet.create({
     fontSize: 8,
     bottom: 10,
     right: 18,
-    color: '#727272'
+    color: '#6C7A72'
   }
 });
 
-const ReportPDF = ({ data, patient, medico }) => {
+const ReportPDF = ({ data, patient, medico, calciumScore, reportText }) => {
   const hasCalcification = data.some(item => item.is_calcified);
   const calcifiedFrames = data.filter(item => item.is_calcified).length;
   const totalFrames = data.length;
-  const calcificationPercentage = totalFrames > 0 ? ((calcifiedFrames / totalFrames) * 100).toFixed(1) : 0;  const currentDate = new Date().toLocaleDateString('en-US', { 
+  const calcificationPercentage = totalFrames > 0 ? ((calcifiedFrames / totalFrames) * 100).toFixed(1) : 0;
+  const scoreValue = calciumScore !== null && calciumScore !== undefined ? Number(calciumScore) : null;
+  const score100 = scoreValue !== null && !Number.isNaN(scoreValue) ? Math.round(scoreValue * 100) : null;
+  const currentDate = new Date().toLocaleDateString('pt-PT', { 
     day: '2-digit', 
     month: '2-digit', 
     year: 'numeric' 
@@ -170,67 +173,73 @@ const ReportPDF = ({ data, patient, medico }) => {
       {/* Institution Header */}
       <View style={styles.institutionHeader}>
         <Text style={styles.institutionName}>CALCIVISION</Text>
-        <Text style={styles.institutionDetails}>Artificial Intelligence Echocardiographic Analysis System</Text>
+        <Text style={styles.institutionDetails}>Sistema de análise ecocardiográfica assistida</Text>
       </View>
 
       {/* Date */}
-      <Text style={styles.date}>Date: {currentDate}</Text>
+      <Text style={styles.date}>Data: {currentDate}</Text>
 
       {/* Main Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>ECHOCARDIOGRAPHIC REPORT</Text>
-        <Text style={styles.subtitle}>Aortic Valve Assessment</Text>
+        <Text style={styles.title}>RELATÓRIO ECOCARDIOGRÁFICO</Text>
+        <Text style={styles.subtitle}>Avaliação da válvula aórtica</Text>
       </View>
 
       {/* Patient Information */}
       <View style={styles.patientInfo}>
-        <Text style={styles.sectionTitle}>PATIENT INFORMATION</Text>
+        <Text style={styles.sectionTitle}>DADOS DO PACIENTE</Text>
         <View style={styles.patientRow}>
-          <Text style={styles.patientLabel}>Name:</Text>
+          <Text style={styles.patientLabel}>Nome:</Text>
           <Text style={styles.patientValue}>{patient.name}</Text>
         </View>
         <View style={styles.patientRow}>
-          <Text style={styles.patientLabel}>Age:</Text>
-          <Text style={styles.patientValue}>{patient.age} years</Text>
+          <Text style={styles.patientLabel}>Idade:</Text>
+          <Text style={styles.patientValue}>{patient.age} anos</Text>
         </View>
         <View style={styles.patientRow}>
-          <Text style={styles.patientLabel}>Exam Date:</Text>
+          <Text style={styles.patientLabel}>Data do exame:</Text>
           <Text style={styles.patientValue}>{currentDate}</Text>
         </View>
         <View style={styles.patientRow}>
-          <Text style={styles.patientLabel}>Responsible Physician:</Text>
+          <Text style={styles.patientLabel}>Médico responsável:</Text>
           <Text style={styles.patientValue}>Dr. {medico.first_name} {medico.last_name}</Text>
         </View>
       </View>
 
       {/* Clinical Indication */}
       <View style={styles.compactSection}>
-        <Text style={styles.sectionTitle}>CLINICAL INDICATION</Text>
+        <Text style={styles.sectionTitle}>INDICAÇÃO CLÍNICA</Text>
         <Text style={styles.paragraph}>
-          Echocardiographic assessment of the aortic valve for investigation of valvular calcification using artificial intelligence-assisted analysis.
+          Avaliação ecocardiográfica da válvula aórtica para investigação de calcificação valvular com apoio de análise por IA.
         </Text>
       </View>
 
       {/* Technical Data */}
       <View style={styles.compactSection}>
-        <Text style={styles.sectionTitle}>TECHNICAL DATA</Text>
+        <Text style={styles.sectionTitle}>DADOS TÉCNICOS</Text>
         <Text style={styles.paragraph}>
-          Examination performed with cardiac ultrasound equipment, using AI for automated detection of valvular calcification.
+          Exame realizado com equipamento de ultrassom cardíaco, com deteção automática de calcificação valvular.
         </Text>
         
         <View style={styles.findingItem}>
           <Text style={styles.findingBullet}>•</Text>
-          <Text style={styles.findingText}>Total frames analyzed: <Text style={styles.highlight}>{totalFrames}</Text></Text>
+          <Text style={styles.findingText}>Total de frames analisados: <Text style={styles.highlight}>{totalFrames}</Text></Text>
         </View>
         
         <View style={styles.findingItem}>
           <Text style={styles.findingBullet}>•</Text>
-          <Text style={styles.findingText}>Frames with calcification detected: <Text style={styles.highlight}>{calcifiedFrames}</Text></Text>
+          <Text style={styles.findingText}>Frames com calcificação detetada: <Text style={styles.highlight}>{calcifiedFrames}</Text></Text>
         </View>
         
         <View style={styles.findingItem}>
           <Text style={styles.findingBullet}>•</Text>
-          <Text style={styles.findingText}>Calcification percentage: <Text style={styles.highlight}>{calcificationPercentage}%</Text></Text>
+          <Text style={styles.findingText}>Percentagem de calcificação: <Text style={styles.highlight}>{calcificationPercentage}%</Text></Text>
+        </View>
+        <View style={styles.findingItem}>
+          <Text style={styles.findingBullet}>•</Text>
+          <Text style={styles.findingText}>
+            Calcium score (0-100): <Text style={styles.highlight}>{score100 !== null ? score100 : "N/A"}</Text>
+          </Text>
         </View>
       </View>
 
@@ -238,9 +247,9 @@ const ReportPDF = ({ data, patient, medico }) => {
 
       {/* REGION OF INTEREST ANNOTATIONS - MOVED TO PAGE 1 */}
       <View style={styles.compactSection}>
-        <Text style={styles.sectionTitle}>REGION OF INTEREST ANNOTATIONS</Text>
+        <Text style={styles.sectionTitle}>ANOTAÇÕES DA REGIÃO DE INTERESSE</Text>
         <Text style={styles.paragraph}>
-          Coordinates of anatomical regions identified for aortic valve analysis:
+          Coordenadas das regiões anatómicas identificadas para análise da válvula aórtica:
         </Text>
         
         {data.slice(0, Math.min(data.length, 6)).map((frame, index) => {
@@ -256,7 +265,7 @@ const ReportPDF = ({ data, patient, medico }) => {
                 Frame {index + 1}: ({Math.round(rect.x)}, {Math.round(rect.y)}) - 
                 {Math.round(rect.width)}×{Math.round(rect.height)}px
                 {isAIGenerated && (
-                  <Text style={{fontSize: 7, color: '#727272'}}> (AI)</Text>
+                  <Text style={{fontSize: 7, color: '#6C7A72'}}> (IA)</Text>
                 )}
               </Text>
             </View>
@@ -264,34 +273,34 @@ const ReportPDF = ({ data, patient, medico }) => {
         })}
         
         {data.length > 6 && (
-          <Text style={{fontSize: 8, color: '#727272', marginTop: 2}}>
-            ... and {data.length - 6} additional coordinates (details on page 2)
+          <Text style={{fontSize: 8, color: '#6C7A72', marginTop: 2}}>
+            ... e mais {data.length - 6} coordenadas (detalhes na página 2)
           </Text>
         )}
       </View>
 
       {/* ECHOCARDIOGRAPHIC FINDINGS */}
       <View style={styles.compactSection}>
-        <Text style={styles.sectionTitle}>ECHOCARDIOGRAPHIC FINDINGS</Text>
+        <Text style={styles.sectionTitle}>ACHADOS ECOCARDIOGRÁFICOS</Text>
         <Text style={styles.paragraph}>
-          <Text style={{fontWeight: 'bold'}}>Aortic Valve: </Text>
+          <Text style={{fontWeight: 'bold'}}>Válvula aórtica: </Text>
           {hasCalcification ? (
-            `Evidence of aortic valvular calcification. Presence of calcific deposits in valve leaflets observed in ${calcificationPercentage}% of analyzed frames, suggestive of ${calcificationPercentage > 50 ? 'moderate to severe calcification' : 'mild to moderate calcification'}.`
+            `Evidência de calcificação valvular aórtica. Depósitos calcificados observados em ${calcificationPercentage}% dos frames analisados, sugerindo ${calcificationPercentage > 50 ? 'calcificação moderada a severa' : 'calcificação ligeira a moderada'}.`
           ) : (
-            'Aortic valve with preserved morphology, without evidence of significant calcification in the analyzed frames.'
+            'Válvula aórtica com morfologia preservada, sem evidência de calcificação significativa nos frames analisados.'
           )}
         </Text>
         
         {hasCalcification && (
           <Text style={styles.paragraph}>
-            The presence of aortic valvular calcification may be associated with varying degrees of flow obstruction, requiring correlation with hemodynamic data for complete assessment.
+            A calcificação valvular pode associar-se a diferentes graus de obstrução, exigindo correlação com dados hemodinâmicos para avaliação completa.
           </Text>
         )}
       </View>      {/* Binary Classification Analysis - REDUCED */}
       <View style={styles.compactSection}>
-        <Text style={styles.sectionTitle}>BINARY CLASSIFICATION ANALYSIS</Text>
+        <Text style={styles.sectionTitle}>ANÁLISE DE CLASSIFICAÇÃO BINÁRIA</Text>
         <Text style={styles.paragraph}>
-          Automated classification system using AI model for valvular calcification detection:
+          Sistema automático de classificação para deteção de calcificação valvular:
         </Text>
         
         {data.slice(0, Math.min(data.length, 4)).map((frame, index) => {
@@ -304,12 +313,12 @@ const ReportPDF = ({ data, patient, medico }) => {
             <View key={index} style={styles.findingItem}>
               <Text style={styles.findingBullet}>•</Text>
               <Text style={styles.findingText}>
-                Frame {index + 1}: {frame.is_calcified ? 'CALCIFIED' : 'NOT-CALCIFIED'} 
+                Frame {index + 1}: {frame.is_calcified ? 'CALCIFICADA' : 'NÃO CALCIFICADA'} 
                 {confidence > 0 && (
                   <Text> - {confidence.toFixed(1)}%</Text>
                 )}
                 {isAIGenerated && (
-                  <Text style={{fontSize: 7, color: '#727272'}}> (AI)</Text>
+                  <Text style={{fontSize: 7, color: '#6C7A72'}}> (IA)</Text>
                 )}
               </Text>
             </View>
@@ -317,8 +326,8 @@ const ReportPDF = ({ data, patient, medico }) => {
         })}
         
         {data.length > 4 && (
-          <Text style={{fontSize: 8, color: '#727272', marginTop: 4}}>
-            ... and {data.length - 4} additional frames analyzed
+          <Text style={{fontSize: 8, color: '#6C7A72', marginTop: 4}}>
+            ... e mais {data.length - 4} frames analisados
           </Text>
         )}
       </View>
@@ -327,15 +336,22 @@ const ReportPDF = ({ data, patient, medico }) => {
 
       {/* Conclusion */}
       <View style={styles.conclusion}>
-        <Text style={styles.sectionTitle}>CONCLUSION</Text>
+        <Text style={styles.sectionTitle}>CONCLUSÃO</Text>
         <Text style={styles.paragraph}>
           {hasCalcification ? (
-            `Echocardiogram demonstrates aortic valve calcification in ${calcificationPercentage}% of analyzed frames. Complementary hemodynamic assessment and specialized cardiac follow-up are recommended.`
+            `Ecocardiograma demonstra calcificação da válvula aórtica em ${calcificationPercentage}% dos frames analisados. Recomenda-se avaliação hemodinâmica complementar e seguimento cardiológico.`
           ) : (
-            'Echocardiogram with normal-appearing aortic valve, without evidence of significant calcification at the time of examination.'
+            'Ecocardiograma com válvula aórtica de aspeto normal, sem evidência de calcificação significativa no momento do exame.'
           )}
         </Text>
       </View>
+
+      {reportText && (
+        <View style={styles.compactSection}>
+          <Text style={styles.sectionTitle}>OBSERVAÇÕES DO CLÍNICO</Text>
+          <Text style={styles.paragraph}>{reportText}</Text>
+        </View>
+      )}
 
       {/* Signature */}
       <View style={styles.signature}>
@@ -343,9 +359,9 @@ const ReportPDF = ({ data, patient, medico }) => {
         <Text style={{fontWeight: 'bold', marginTop: 6, fontSize: 10}}>
           Dr. {medico.first_name} {medico.last_name}
         </Text>
-        <Text style={{fontSize: 9, marginTop: 2}}>Cardiologist</Text>
-        <Text style={{fontSize: 7, marginTop: 8, color: '#727272'}}>
-          Report generated with artificial intelligence assistance - CalciVision System
+        <Text style={{fontSize: 9, marginTop: 2}}>Cardiologista</Text>
+        <Text style={{fontSize: 7, marginTop: 8, color: '#6C7A72'}}>
+          Relatório gerado com assistência de IA - CalciVision
         </Text>
       </View>
     </Page>

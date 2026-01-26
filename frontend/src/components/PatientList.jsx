@@ -29,12 +29,12 @@ export default function PatientList({ patients, defaultPatient, reloadTable }) {
                 <thead className='border-b-2'>
                     <tr>
                         <th className='w-1/20' />
-                        <th className='w-1/6 px-4 py-2 text-left'>Patient</th>
-                        <th className='w-1/9 px-4 py-2 text-left'>Updated</th>
-                        <th className='w-1/8 px-4 py-2 text-left'>Review Status</th>
-                        <th className='w-1/6 px-4 py-2 text-left'>Address</th>
+                        <th className='w-1/6 px-4 py-2 text-left'>Paciente</th>
+                        <th className='w-1/9 px-4 py-2 text-left'>Atualizado</th>
+                        <th className='w-1/8 px-4 py-2 text-left'>Estado</th>
+                        <th className='w-1/6 px-4 py-2 text-left'>Morada</th>
                         <th className='w-1/5 px-4 py-2 text-left'>Email</th>
-                        <th className='1/6 px-4 py-2 text-left'>Echos</th>
+                        <th className='1/6 px-4 py-2 text-left'>Exames</th>
                         <th className='w-1/20' />
                     </tr>
                 </thead>
@@ -51,14 +51,14 @@ export default function PatientList({ patients, defaultPatient, reloadTable }) {
             </table>
             <div className='flex justify-between mt-5'>
                 <div className='flex items-center gap-2'>
-                    <span>Show</span>
+                    <span>Mostrar</span>
                     <input
                         type='number'
                         defaultValue={10}
                         className='w-10 h-5 p-1 text-sm outline-2 rounded-sm'
                         onChange={handleChangeRowsPerView}
                     />
-                    <span>per view</span>
+                    <span>por página</span>
                 </div>
                 <div className='flex gap-2'>
                     <button
@@ -80,7 +80,7 @@ export default function PatientList({ patients, defaultPatient, reloadTable }) {
                         <svg xmlns="http://www.w3.org/2000/svg" width={12} height={20} viewBox="0 0 12 24"><path fillRule="evenodd" d="M10.157 12.711L4.5 18.368l-1.414-1.414l4.95-4.95l-4.95-4.95L4.5 5.64l5.657 5.657a1 1 0 0 1 0 1.414"></path></svg>
                     </button>
                     <span>
-                        {firstRow} - {Math.min(patients.length, firstRow + rowsPerView - 1)} of {patients.length}
+                        {firstRow} - {Math.min(patients.length, firstRow + rowsPerView - 1)} de {patients.length}
                     </span>
                 </div>
             </div>
@@ -99,7 +99,7 @@ function PatientRow({ patient, defaultState, reloadTable }) {
             reloadTable()
         } catch (error) {
             console.error('Erro ao deletar paciente:', error);
-            alert('Erro ao deletar paciente.');
+            alert('Erro ao eliminar paciente.');
         }
     };
 
@@ -109,7 +109,7 @@ function PatientRow({ patient, defaultState, reloadTable }) {
             reloadTable()
         } catch (error) {
             console.error('Erro ao deletar relatório:', error);
-            alert('Erro ao deletar relatório.');
+            alert('Erro ao eliminar relatório.');
         }
     };
 
@@ -133,8 +133,8 @@ function PatientRow({ patient, defaultState, reloadTable }) {
                 <td className='px-4 py-3 text-left min-w-8 truncate'>{patient.echocardiograms.length}</td>
                 <td>
                     <AlertDialogMenu
-                        heading='Delete Patient'
-                        content={`Are you sure you want to delete patient "${patient.name}"? This action cannot be undone.`}
+                        heading='Eliminar paciente'
+                        content={`Tem a certeza de que pretende eliminar o paciente "${patient.name}"? Esta ação é irreversível.`}
                         onConfirm={(e) => handleDeletePatient(patient.id)}
                     >
                         <button onClick={(e) => e.stopPropagation()}>
@@ -147,17 +147,17 @@ function PatientRow({ patient, defaultState, reloadTable }) {
                 <td colSpan={7} className='p-0! text-left min-w-8'>
                     <div className={`patient-row-menu transition-[height] ease-out duration-500 overflow-hidden ${isOpen ? 'h-auto' : 'h-0'}`}>
                         <div className="grid xl:grid-cols-[60%_40%] xl:grid-rows-1 grid-rows-2 gap-12 px-15! py-4! border-b-2 border-b-gray-medium">
-                            <div>
-                                <h6 className='mb-3'>Echocardiograms</h6>
+                            <div className="rounded-lg bg-white/70 p-4">
+                                <h6 className='mb-3'>Exames</h6>
                                 {patient.echocardiograms?.length > 0 ? (
                                     <EchocardiogramsTable patient={patient} reloadTable={reloadTable} />
                                 ) : (
-                                    <em>No echocardiograms found.</em>
+                                    <em>Sem ecocardiogramas registados.</em>
                                 )}
                                 {patient && <UploadDicomFiles patientId={patient.id} reloadTable={reloadTable} />}
                             </div>
-                            <div>
-                                <h6 className='mb-3'>Reports</h6>
+                            <div className="rounded-lg bg-white/70 p-4">
+                                <h6 className='mb-3'>Relatórios</h6>
                                 {patient.reports?.length > 0 ? (
                                     <ul className='flex flex-col gap-2'>
                                         {patient.reports.map((report, idx) =>
@@ -176,7 +176,7 @@ function PatientRow({ patient, defaultState, reloadTable }) {
                                         )}
                                     </ul>
                                 ) : (
-                                    <em>No reports found.</em>
+                                    <em>Sem relatórios disponíveis.</em>
                                 )}
                             </div>
                         </div>
@@ -198,18 +198,53 @@ function EchocardiogramsTable({ patient, reloadTable }) {
         }
     }
     
+    const sortedEchos = [...(patient.echocardiograms || [])].sort(
+        (a, b) => new Date(b.uploaded_at) - new Date(a.uploaded_at)
+    );
+
+    const getRiskMeta = (score) => {
+        if (score === null || Number.isNaN(score)) {
+            return { label: "Sem score", className: "bg-gray-soft text-gray-medium-dark" };
+        }
+        if (score < 0.34) {
+            return { label: "Baixo risco", className: "bg-green-100 text-green-700" };
+        }
+        if (score < 0.67) {
+            return { label: "Risco moderado", className: "bg-amber-100 text-amber-700" };
+        }
+        return { label: "Risco elevado", className: "bg-rose-100 text-rose-700" };
+    };
+
     return (
         <table className='table-fixed w-full border-collapse'>
             <thead>
                 <tr className=''>
-                    <th className="w-2/7 px-4 py-1 text-left truncate border-b-2">Name</th>
-                    <th className="w-1/5 px-4 py-1 text-left truncate border-b-2">Status</th>
-                    <th className="w-1/4 px-4 py-1 text-left truncate border-b-2">Uploaded</th>
+                    <th className="w-2/7 px-4 py-1 text-left truncate border-b-2">Exame</th>
+                    <th className="w-1/5 px-4 py-1 text-left truncate border-b-2">Estado</th>
+                    <th className="w-1/4 px-4 py-1 text-left truncate border-b-2">Carregado</th>
+                    <th className="w-1/6 px-4 py-1 text-left truncate border-b-2">Risco</th>
                     <th className="w-1/8 pl-8 py-1"></th>
                 </tr>
             </thead>
             <tbody>
-                {patient.echocardiograms?.map((echo, index) =>
+                {sortedEchos.map((echo, index) => {
+                    const storedScore = localStorage.getItem(`calciumScore:${patient.id}:${echo.id}`);
+                    const scoreValue = storedScore ? Number(storedScore) : null;
+                    const riskMeta = getRiskMeta(scoreValue);
+                    const actionLabel = echo.status === 'EVALUATED' ? 'Ver relatório' : 'Analisar exame';
+                    const handlePrimaryAction = () => {
+                        if (echo.status === 'EVALUATED') {
+                            const reportUrl = patient.reports?.[0]?.report_url;
+                            if (reportUrl) {
+                                window.open(reportUrl, '_blank');
+                            } else {
+                                window.open('/reports', '_blank');
+                            }
+                        } else {
+                            window.open(`/analyse_aortic_valve/${patient.id}/${echo.id}`, '_blank');
+                        }
+                    };
+                    return (
                     <tr key={index}>
                         <td className="px-4 py-1"><strong>{echo.description}</strong></td>
                         <td className="px-4 py-1">
@@ -218,17 +253,23 @@ function EchocardiogramsTable({ patient, reloadTable }) {
                             </div>
                         </td>
                         <td className="px-4 py-1"><em>{new Date(echo.uploaded_at).toLocaleString('pt-PT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</em></td>
+                        <td className="px-4 py-1">
+                            <span className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${riskMeta.className}`}>
+                                {riskMeta.label}
+                            </span>
+                        </td>
                         <td>
                             <div className='flex justify-end gap-2'>
                                 <button 
-                                    className='block bg-blue-500 rounded-lg p-[6px] text-white text-sm'
-                                    onClick={() => window.open(`/analyse_aortic_valve/${patient.id}/${echo.id}`, '_blank')}
+                                    className='flex items-center gap-2 rounded-lg bg-red-dark px-3 py-2 text-white text-sm'
+                                    onClick={handlePrimaryAction}
                                 >
                                     <svg xmlns="http://www.w3.org/2000/svg" width={16} height={16} viewBox="0 0 24 24"><path fill="currentColor" d="m18.988 2.012l3 3L19.701 7.3l-3-3zM8 16h3l7.287-7.287l-3-3L8 13z"/><path fill="currentColor" d="M19 19H8.158c-.026 0-.053.01-.079.01c-.033 0-.066-.009-.1-.01H5V5h6.847l2-2H5c-1.103 0-2 .896-2 2v14c0 1.104.897 2 2 2h14a2 2 0 0 0 2-2v-8.668l-2 2z"/></svg>
+                                    {actionLabel}
                                 </button>
                                 <AlertDialogMenu
-                                    heading='Delete Echocardiogram'
-                                    content={`Are you sure you want to delete echocariogram "${echo.description}"? This action cannot be undone.`}
+                                    heading='Eliminar ecocardiograma'
+                                    content={`Tem a certeza de que pretende eliminar o ecocardiograma "${echo.description}"? Esta ação é irreversível.`}
                                     onConfirm={() => handleDeleteEchocardiogram(echo)}
                                 >
                                     <button className='block bg-red rounded-lg p-[6px] text-white text-sm'>
@@ -238,7 +279,8 @@ function EchocardiogramsTable({ patient, reloadTable }) {
                             </div>
                         </td>
                     </tr>
-                )}
+                    );
+                })}
             </tbody>
         </table>
     )

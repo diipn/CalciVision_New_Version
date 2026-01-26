@@ -55,7 +55,8 @@ const Reports = () => {
     const selectedPatient = patients.find(p => p.id === selectedPatientId);
 
     const generatePdfBlob = async (echoData, selectedPatient, user) => {
-        const doc = <ReportPDF data={echoData} patient={selectedPatient} medico={user} />;
+        const storedScore = selectedPatient ? localStorage.getItem(`calciumScore:${selectedPatient.id}`) : null;
+        const doc = <ReportPDF data={echoData} patient={selectedPatient} medico={user} calciumScore={storedScore ? Number(storedScore) : null} />;
         const asPdf = pdf([]);
         asPdf.updateContainer(doc);
         const blob = await asPdf.toBlob();
@@ -63,24 +64,24 @@ const Reports = () => {
     };
 
     return (
-        <MainLayout pageTitle="Medical Reports">
+        <MainLayout pageTitle="Relatórios Clínicos">
             <div className="">
-                <h3 className="font-bold mb-4">AI Reports</h3>
-                <p className="mb-10 text-lg">On this page, you will find patients whose echocardiograms have already been analyzed, but whose reports have not yet been generated with the assistance of AI.
-                    <br /> Please select a patient to proceed with the report generation.</p>
+                <h3 className="font-bold mb-4">Relatórios com apoio de IA</h3>
+                <p className="mb-10 text-lg">Nesta página encontra pacientes com ecocardiogramas já analisados, mas sem relatório gerado.
+                    <br /> Selecione o paciente para gerar o relatório.</p>
                 {/* Patient List */}
                 <div className="mb-8">
-                    <h2 className="text-lg font-semibold mb-4">Select Patient</h2>
+                    <h2 className="text-lg font-semibold mb-4">Selecionar paciente</h2>
                     <div>
                         <table className="w-full table-fixed bg-red-light shadow-md">
                             <thead className='border-b-2'>
                                 <tr>
-                                    <th className='w-[9%] p-3 text-center'>Select</th>
-                                    <th className='w-[20%] p-3 text-left'>Patient</th>
-                                    <th className='w-[15%] p-3 text-left'>Age</th>
+                                    <th className='w-[9%] p-3 text-center'>Selecionar</th>
+                                    <th className='w-[20%] p-3 text-left'>Paciente</th>
+                                    <th className='w-[15%] p-3 text-left'>Idade</th>
                                     <th className='w-[20%] p-3 text-left'>Email</th>
-                                    <th className='w-[25%] p-3 text-center'>Review Status</th>
-                                    <th className='w-[15%] p-3 text-left'>Echos</th>
+                                    <th className='w-[25%] p-3 text-center'>Estado</th>
+                                    <th className='w-[15%] p-3 text-left'>Exames</th>
                                 </tr>
                             </thead>
                             <tbody className="w-full table-fixed">
@@ -94,7 +95,7 @@ const Reports = () => {
                                                     onChange={() => setSelectedPatientId(patient.id)}
                                                 />
                                             </td>
-                                            <td className="p-3 text-left">{patient.name}</td>
+                                        <td className="p-3 text-left">{patient.name}</td>
                                             <td className="align-middle text-left p-2">{patient.age}</td>
                                             <td className="align-middle text-left p-2">{patient.email}</td>
                                             <td className="px-35  ">
@@ -108,7 +109,7 @@ const Reports = () => {
                                 ) : (
                                     <tr>
                                         <td colSpan="3" className="px-4 py-2 border text-center">
-                                            No patients found
+                                            Nenhum paciente encontrado
                                         </td>
                                     </tr>
                                 )}
@@ -120,10 +121,10 @@ const Reports = () => {
                 {/* Echo Data Preview */}
                 {selectedPatientId && (
                     <div className="bg-gray-100 p-4 rounded-lg">
-                        <h2 className="text-lg font-semibold mb-4">Echocardiogram Data</h2>
+                        <h2 className="text-lg font-semibold mb-4">Dados do ecocardiograma</h2>
 
                         {isLoading ? (
-                            <p>Loading data...</p>
+                            <p>A carregar dados...</p>
                         ) : echoData.length > 0 ? (
                             <>
                                 <div className="mb-4 space-y-3">
@@ -131,16 +132,16 @@ const Reports = () => {
                                         <div key={index} className="bg-white p-8 rounded shadow flex justify-between items-center">
                                             <p><strong>Frame:</strong> {item.frame || 'N/A'}</p>
                                             <p>
-                                                <strong>Position:</strong> X: {item.rects?.x ?? 'N/A'} , Y: {item.rects?.y ?? 'N/A'}
+                                                <strong>Posição:</strong> X: {item.rects?.x ?? 'N/A'} , Y: {item.rects?.y ?? 'N/A'}
                                             </p>
                                             <p>
-                                                <strong>Size:</strong> {item.rects?.width ?? 'N/A'} x {item.rects?.height ?? 'N/A'}
+                                                <strong>Tamanho:</strong> {item.rects?.width ?? 'N/A'} x {item.rects?.height ?? 'N/A'}
                                             </p>
                                             <p>
-                                                <strong>Calcified:</strong> {item.is_calcified ? 'Yes' : 'No'}
+                                                <strong>Calcificada:</strong> {item.is_calcified ? 'Sim' : 'Não'}
                                             </p>
                                             <p>
-                                                <strong>Confidence:</strong> {item.confidence ?? 'N/A'} %
+                                                <strong>Confiança:</strong> {item.confidence ?? 'N/A'} %
                                             </p>
                                         </div>
                                     ))}
@@ -159,18 +160,18 @@ const Reports = () => {
                                             formData.append("pdf_file", pdfBlob, `report_${selectedPatientId}.pdf`);
 
                                             await createReport(formData, selectedPatientId);
-                                            alert("Report enviado e salvo com sucesso!");
+                                            alert("Relatório enviado e guardado com sucesso!");
                                         } catch (err) {
                                             console.error("Erro completo:", err);
-                                            alert("Erro ao enviar report: " + (err.response?.data?.error || err.message));
+                                            alert("Erro ao enviar relatório: " + (err.response?.data?.error || err.message));
                                         }
                                     }}
                                 >
-                                    Generate Report
+                                    Gerar relatório
                                 </button>
                             </>
                         ) : (
-                            <p>No data available for this patient</p>
+                            <p>Sem dados disponíveis para este paciente</p>
                         )}
                     </div>
                 )}

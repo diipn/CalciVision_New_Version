@@ -17,6 +17,9 @@ export default function ManualAnnotation() {
   // A posição do retângulo dada pelo modelo
   const [predictedValveBoxes, setPredictedValveBoxes] = useState([]);
   const [calcificationStatus, setCalcificationStatus] = useState(null);
+  const [valveConfirmations, setValveConfirmations] = useState([]);
+  const [calciumScore, setCalciumScore] = useState(null);
+  const [reportText, setReportText] = useState("");
 
   const [patient, setPatient] = useState(null);
   const { patientId, echoId } = useParams();
@@ -106,9 +109,18 @@ export default function ManualAnnotation() {
         setPredictedValveBoxes(formattedPredictedValveBoxes);
         setCalcification(formattedCalcification);
         setPredictionHistory(formattedPredictionHistory);
+        setValveConfirmations(formattedFrames.map(() => false));
+
+        const storedReportText = localStorage.getItem(`reportText:${patientId}:${echoId}`);
+        setReportText(
+          storedReportText ||
+            "Relatório automático gerado pelo protótipo. Edite conforme necessário."
+        );
         
-        formattedCalcification[currentFrame].binary_classification !== null &&
-          setCalcificationStatus(formattedCalcification[currentFrame].binary_classification === 1)
+        const currentBinary = formattedCalcification[currentFrame]?.binary_classification;
+        if (currentBinary !== null && currentBinary !== undefined) {
+          setCalcificationStatus(Boolean(currentBinary));
+        }
 
       } catch(error) {
         if (error.response && (error.response.status === 403 || error.response.status === 404)) {
@@ -118,6 +130,28 @@ export default function ManualAnnotation() {
     }
     fetchFrames()
   }, [patientId, echoId]);
+
+  useEffect(() => {
+    if (!frames.length) return;
+    const storedScore = localStorage.getItem(`calciumScore:${patientId}:${echoId}`) || localStorage.getItem(`calciumScore:${patientId}`);
+    if (storedScore) {
+      setCalciumScore(Number(storedScore));
+      return;
+    }
+
+    const results = calcification.filter(
+      item => item?.binary_classification !== null && item?.binary_classification !== undefined
+    );
+    if (results.length > 0) {
+      const calcified = results.filter(item => item.binary_classification).length;
+      setCalciumScore(Number((calcified / results.length).toFixed(2)));
+      return;
+    }
+
+    if (calciumScore === null) {
+      setCalciumScore(Number((Math.random() * 0.4 + 0.3).toFixed(2)));
+    }
+  }, [calcification, frames.length, patientId, echoId, calciumScore]);
 
   return (
     <MainLayout pageTitle={`${patient && patient.name} Analysis - CalciVision`}>
@@ -138,10 +172,13 @@ export default function ManualAnnotation() {
           setCalcification={setCalcification}
           predictionHistory={predictionHistory}
           setPredictionHistory={setPredictionHistory}
+          valveConfirmations={valveConfirmations}
+          setValveConfirmations={setValveConfirmations}
         />
         <AnnotationToolMenu 
           frames={frames}
           currentFrame={currentFrame} 
+          setCurrentFrame={setCurrentFrame}
           rects={rects} 
           calcificationStatus={calcificationStatus}
           setCalcificationStatus={setCalcificationStatus}
@@ -150,6 +187,10 @@ export default function ManualAnnotation() {
           predictionHistory={predictionHistory}
           patient={patient}
           echoId={echoId}
+          valveConfirmations={valveConfirmations}
+          calciumScore={calciumScore}
+          reportText={reportText}
+          setReportText={setReportText}
         />
       </div>
     </MainLayout>

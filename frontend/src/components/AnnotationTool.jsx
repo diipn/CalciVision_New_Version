@@ -9,7 +9,7 @@ import ProgressBar from "./ProgressBar";
 import AnnotationDropdown from "./AnnotationDropdown";
 import { useUnsavedStore } from "../store/useUnsavedStore";
 
-export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, rects, setRects, calcificationStatus, setCalcificationStatus, predictedValveBoxes, setPredictedValveBoxes, calcification, setCalcification, predictionHistory, setPredictionHistory }) {
+export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, rects, setRects, calcificationStatus, setCalcificationStatus, predictedValveBoxes, setPredictedValveBoxes, calcification, setCalcification, predictionHistory, setPredictionHistory, valveConfirmations, setValveConfirmations }) {
     const [frame] = useImage(frames[currentFrame]?.url)
     // Referências ao stage (a área de desenho) e ao group (o conjunto da imagem com as anotações)
     const stageRef = useRef(null);
@@ -22,6 +22,9 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
     const [selectedRect, setSelectedRect] = useState(null);
     const [isDrawing, setIsDrawing] = useState(false);
     const [isOverRect, setIsOverRect] = useState(false);
+    const [brightness, setBrightness] = useState(0);
+    const [contrast, setContrast] = useState(0);
+    const [noiseReduction, setNoiseReduction] = useState(false);
 
     // Lazy Initialization. A função só executa NA PRIMEIRA RENDERIZAÇÃO
     const [scales, setScales] = useState(() => Array(frames.length).fill(1))
@@ -29,6 +32,8 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
 
     const currentScale = scales[currentFrame] || 1
     const currentPosition = framePositions[currentFrame] || { x: 0, y: 0 }
+    const defaultScale = 0.9;
+    const defaultPosition = { x: 88, y: 0 };
 
     // Controla qual é o tipo de ponteiro do rato com base no que o utilizador está a fazer
     const [cursorType, setCursorType] = useState('default');
@@ -68,9 +73,9 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
     useEffect(() => {
         if (frame && frame.width && frame.height) {
             // Valores fixos para teste
-            const centeredX = 88; // Posição fixa para a esquerda(a mão)
-            const centeredY = 0;  // Posição fixa para cima(a mão)
-            const optimalScale = 0.9;
+            const centeredX = defaultPosition.x; // Posição fixa para a esquerda(a mão)
+            const centeredY = defaultPosition.y;  // Posição fixa para cima(a mão)
+            const optimalScale = defaultScale;
             
             setScales(prev => {
                 const updatedScales = [...prev];
@@ -207,6 +212,43 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
         setSelectedRect(null);
         setUnsavedChanges(true);
     };
+
+    const handleResetView = () => {
+        setScales(prev => {
+            const updatedScales = [...prev]
+            updatedScales[currentFrame] = defaultScale
+            return updatedScales
+        })
+        setFramePositions(prev => {
+            const updatedPositions = [...prev]
+            updatedPositions[currentFrame] = { ...defaultPosition }
+            return updatedPositions
+        })
+        setBrightness(0)
+        setContrast(0)
+        setNoiseReduction(false)
+    }
+
+    const handleConfirmValve = () => {
+        if (!rects[currentFrame]?.length) return
+        setValveConfirmations(prev => {
+            const updated = [...prev]
+            updated[currentFrame] = true
+            return updated
+        })
+        setUnsavedChanges(true)
+    }
+
+    const handleAdjustValve = () => {
+        if (rects[currentFrame]?.length) {
+            setSelectedRect(rects[currentFrame][0]?.id ?? null)
+        }
+        setValveConfirmations(prev => {
+            const updated = [...prev]
+            updated[currentFrame] = false
+            return updated
+        })
+    }
 
     // Função para ativar/desativar o modo de desenho
     const toggleDrawingMode = () => {
@@ -494,68 +536,151 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
         }
     }
 
+    const valveIdentified = rects[currentFrame]?.length > 0
+    const calcificationDone = calcification[currentFrame]?.binary_classification !== undefined && calcification[currentFrame]?.binary_classification !== null
+    const currentStep = !valveIdentified ? 1 : !calcificationDone ? 2 : 3
+    const stepTitle = currentStep === 1
+        ? 'Anotação manual – Passo 1 de 3'
+        : currentStep === 2
+        ? 'Análise de calcificação – Passo 2 de 3'
+        : 'Confirmação & guardar – Passo 3 de 3'
+
+    const imageFilterStyle = {
+        filter: `brightness(${1 + brightness / 100}) contrast(${1 + contrast / 100})${noiseReduction ? ' blur(0.6px)' : ''}`,
+    }
+
     return (
         <div className='w-[750px] flex flex-col items-center rounded-lg overflow-hidden'>
             {/* Cabeçalho (com os botões) */}
-            <div className='relative bg-red text-white w-full flex items-center px-6 py-3'>
-                <h5 className='mr-4'>Manual Annotation</h5>
-
-                <div className='flex ml-auto'>
-                    <button onClick={handleZoomIn} className='p-1 rounded-sm' title="Zoom In">
-                        <svg xmlns="http://www.w3.org/2000/svg" width={24} height={24} viewBox="0 0 24 24"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5A6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5S14 7.01 14 9.5S11.99 14 9.5 14m.5-7H9v2H7v1h2v2h1v-2h2V9h-2z"></path></svg>
-                    </button>
-
-                    <button onClick={handleZoomOut} className='p-1 rounded-sm' title="Zoom Out">
-                        <svg xmlns="http://www.w3.org/2000/svg" width={24} height={24} viewBox="0 0 24 24"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5A6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5S14 7.01 14 9.5S11.99 14 9.5 14M7 9h5v1H7z"></path></svg>
-                    </button>
+            <div className='relative bg-red text-white w-full px-6 py-3'>
+                <div className='flex items-center justify-between'>
+                    <div>
+                        <p className='text-xs uppercase tracking-[0.2em] text-white/70'>Ferramenta de anotação</p>
+                        <h5>{stepTitle}</h5>
+                    </div>
+                    <div className='flex items-center gap-3 text-sm'>
+                        {[1, 2, 3].map(step => (
+                            <div key={step} className={`flex items-center gap-2 ${currentStep >= step ? 'text-white' : 'text-white/50'}`}>
+                                <span className={`grid place-items-center size-6 rounded-full border ${currentStep >= step ? 'bg-white/15 border-white' : 'border-white/50'}`}>{step}</span>
+                                <span className='hidden md:inline'>
+                                    {step === 1 ? 'Identificar válvula' : step === 2 ? 'Detetar calcificação' : 'Confirmar & guardar'}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
                 </div>
 
-                <div className='flex gap-2 ml-auto text-white'>
-
-                    {/* Botão de cancelar a anotação manual; Botão de retomar posição identificada pelo modelo; Botão de dropdown com os dois tipos de anotação da válvula */}
-                    {isDrawing ? (
-                        <button 
-                            onClick={toggleDrawingMode} 
-                            className='flex items-center bg-red-dark rounded-lg py-2 px-4 space-x-2 text-white'
-                            title='Cancel Manual Annotation'
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" width={24} height={24} viewBox="0 0 24 24"><path fill="currentColor" d="M18.66 2c-.26 0-.5.09-.69.28l-1.84 1.85l3.75 3.75l1.84-1.85c.39-.39.39-1.03 0-1.4l-2.34-2.35c-.2-.19-.47-.28-.72-.28M3.28 4L2 5.28l6.5 6.47l-4.5 4.5V20h3.75l4.5-4.5l6.47 6.5L20 20.72l-6.5-6.47l-3.75-3.75zm11.78 1.19l-4.03 4.03l3.75 3.75l4.03-4.03z"></path></svg>
-                            <span role='tooltip'>Cancel Annotation</span>
-                        </button>
-                    ) : predictedValveBoxes[currentFrame] ? (
-                        <button 
-                            onClick={handleResetValvePosition} 
-                            className='p-2 rounded-sm flex items-center gap-4 transition-colors bg-red-dark disabled:hidden'
-                            title='Reset AI Annotation'
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" width={24} height={24} viewBox="0 0 24 24"><g fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}><path d="M12 3a9 9 0 1 1-5.657 2"></path><path d="M3 4.5h4v4"></path></g></svg>
-                            <span role='tooltip'>Reset Position</span>
-                        </button>
-                    ) : (
-                        <AnnotationDropdown
-                            handleDectectValve={handleDetectValve}
-                            toggleDrawingMode={toggleDrawingMode}
-                            annotated={rects[currentFrame]?.length > 0}
-                        >
-                            <button 
-                                className='flex items-center bg-red-dark rounded-lg py-2 px-4 space-x-2 text-white'
-                                title="AI Valve Detection Tool"
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" width={24} height={24} viewBox="0 0 24 24"><g fill="none" fillRule="evenodd"><path d="m12.593 23.258l-.011.002l-.071.035l-.02.004l-.014-.004l-.071-.035q-.016-.005-.024.005l-.004.01l-.017.428l.005.02l.01.013l.104.074l.015.004l.012-.004l.104-.074l.012-.016l.004-.017l-.017-.427q-.004-.016-.017-.018m.265-.113l-.013.002l-.185.093l-.01.01l-.003.011l.018.43l.005.012l.008.007l.201.093q.019.005.029-.008l.004-.014l-.034-.614q-.005-.018-.02-.022m-.715.002a.02.02 0 0 0-.027.006l-.006.014l-.034.614q.001.018.017.024l.015-.002l.201-.093l.01-.008l.004-.011l.017-.43l-.003-.012l-.01-.01z"></path><path fill="currentColor" d="M20.131 3.16a3 3 0 0 0-4.242 0l-.707.708l4.95 4.95l.706-.707a3 3 0 0 0 0-4.243l-.707-.707Zm-1.414 7.072l-4.95-4.95l-9.09 9.091a1.5 1.5 0 0 0-.401.724l-1.029 4.455a1 1 0 0 0 1.2 1.2l4.456-1.028a1.5 1.5 0 0 0 .723-.401z"></path></g></svg>
-                                <span role='tooltip'>Annotate Valve</span>
+                <div className='mt-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm'>
+                    <div className='bg-red-dark/30 rounded-lg p-3 space-y-2'>
+                        <p className='text-xs uppercase tracking-[0.2em] text-white/70'>Visualização</p>
+                        <div className='flex items-center gap-2'>
+                            <button onClick={handleZoomIn} className='p-1 rounded-sm' title="Zoom +">
+                                <svg xmlns="http://www.w3.org/2000/svg" width={22} height={22} viewBox="0 0 24 24"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5A6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5S14 7.01 14 9.5S11.99 14 9.5 14m.5-7H9v2H7v1h2v2h1v-2h2V9h-2z"></path></svg>
                             </button>
-                        </AnnotationDropdown>
-                    )}
+                            <button onClick={handleZoomOut} className='p-1 rounded-sm' title="Zoom -">
+                                <svg xmlns="http://www.w3.org/2000/svg" width={22} height={22} viewBox="0 0 24 24"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5A6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5S14 7.01 14 9.5S11.99 14 9.5 14M7 9h5v1H7z"></path></svg>
+                            </button>
+                            <button onClick={handleResetView} className='px-2 py-1 rounded-md bg-white/10' title="Repor vista">
+                                Repor vista
+                            </button>
+                        </div>
+                        <div className='space-y-2'>
+                            <label className='flex items-center justify-between gap-2'>
+                                <span>Contraste</span>
+                                <input
+                                    type='range'
+                                    min={-30}
+                                    max={30}
+                                    value={contrast}
+                                    onChange={(e) => setContrast(Number(e.target.value))}
+                                />
+                            </label>
+                            <label className='flex items-center justify-between gap-2'>
+                                <span>Luminosidade</span>
+                                <input
+                                    type='range'
+                                    min={-30}
+                                    max={30}
+                                    value={brightness}
+                                    onChange={(e) => setBrightness(Number(e.target.value))}
+                                />
+                            </label>
+                            <label className='flex items-center gap-2 text-xs text-white/80'>
+                                <input
+                                    type='checkbox'
+                                    checked={noiseReduction}
+                                    onChange={() => setNoiseReduction(prev => !prev)}
+                                />
+                                Redução de ruído
+                            </label>
+                        </div>
+                    </div>
 
-                    {/* Botão de deteção do cálcio */}
-                    <button 
-                        onClick={handleDetectCalcium} 
-                        className='flex items-center bg-red-dark rounded-lg py-2 px-4 space-x-2 text-white'
-                        title='AI Calcium Detection Tool'
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" width={24} height={24} viewBox="0 0 24 24"><g fill="none"><path d="m12.594 23.258l-.012.002l-.071.035l-.02.004l-.014-.004l-.071-.036q-.016-.004-.024.006l-.004.01l-.017.428l.005.02l.01.013l.104.074l.015.004l.012-.004l.104-.074l.012-.016l.004-.017l-.017-.427q-.004-.016-.016-.018m.264-.113l-.014.002l-.184.093l-.01.01l-.003.011l.018.43l.005.012l.008.008l.201.092q.019.005.029-.008l.004-.014l-.034-.614q-.005-.019-.02-.022m-.715.002a.02.02 0 0 0-.027.006l-.006.014l-.034.614q.001.018.017.024l.015-.002l.201-.093l.01-.008l.003-.011l.018-.43l-.003-.012l-.01-.01z"></path><path fill="currentColor" d="M9.107 5.448c.598-1.75 3.016-1.803 3.725-.159l.06.16l.807 2.36a4 4 0 0 0 2.276 2.411l.217.081l2.36.806c1.75.598 1.803 3.016.16 3.725l-.16.06l-2.36.807a4 4 0 0 0-2.412 2.276l-.081.216l-.806 2.361c-.598 1.75-3.016 1.803-3.724.16l-.062-.16l-.806-2.36a4 4 0 0 0-2.276-2.412l-.216-.081l-2.36-.806c-1.751-.598-1.804-3.016-.16-3.724l.16-.062l2.36-.806A4 4 0 0 0 8.22 8.025l.081-.216zM19 2a1 1 0 0 1 .898.56l.048.117l.35 1.026l1.027.35a1 1 0 0 1 .118 1.845l-.118.048l-1.026.35l-.35 1.027a1 1 0 0 1-1.845.117l-.048-.117l-.35-1.026l-1.027-.35a1 1 0 0 1-.118-1.845l.118-.048l1.026-.35l.35-1.027A1 1 0 0 1 19 2"></path></g></svg>
-                        <span role='tooltip'>Detect Calcium</span>
-                    </button>
+                    <div className='bg-red-dark/30 rounded-lg p-3 space-y-2'>
+                        <p className='text-xs uppercase tracking-[0.2em] text-white/70'>Anotação</p>
+                        <div className='flex flex-wrap gap-2'>
+                            {isDrawing ? (
+                                <button 
+                                    onClick={toggleDrawingMode} 
+                                    className='flex items-center bg-red-dark rounded-lg py-2 px-4 space-x-2 text-white'
+                                    title='Cancelar anotação manual'
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width={22} height={22} viewBox="0 0 24 24"><path fill="currentColor" d="M18.66 2c-.26 0-.5.09-.69.28l-1.84 1.85l3.75 3.75l1.84-1.85c.39-.39.39-1.03 0-1.4l-2.34-2.35c-.2-.19-.47-.28-.72-.28M3.28 4L2 5.28l6.5 6.47l-4.5 4.5V20h3.75l4.5-4.5l6.47 6.5L20 20.72l-6.5-6.47l-3.75-3.75zm11.78 1.19l-4.03 4.03l3.75 3.75l4.03-4.03z"></path></svg>
+                                    <span role='tooltip'>Cancelar anotação</span>
+                                </button>
+                            ) : predictedValveBoxes[currentFrame] ? (
+                                <button 
+                                    onClick={handleResetValvePosition} 
+                                    className='p-2 rounded-sm flex items-center gap-2 transition-colors bg-red-dark disabled:hidden'
+                                    title='Repor contorno IA'
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width={22} height={22} viewBox="0 0 24 24"><g fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}><path d="M12 3a9 9 0 1 1-5.657 2"></path><path d="M3 4.5h4v4"></path></g></svg>
+                                    <span role='tooltip'>Repor contorno IA</span>
+                                </button>
+                            ) : (
+                                <AnnotationDropdown
+                                    handleDectectValve={handleDetectValve}
+                                    toggleDrawingMode={toggleDrawingMode}
+                                    annotated={rects[currentFrame]?.length > 0}
+                                >
+                                    <button 
+                                        className='flex items-center bg-red-dark rounded-lg py-2 px-4 space-x-2 text-white'
+                                        title="Deteção automática da válvula"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" width={22} height={22} viewBox="0 0 24 24"><g fill="none" fillRule="evenodd"><path d="m12.593 23.258l-.011.002l-.071.035l-.02.004l-.014-.004l-.071-.035q-.016-.005-.024.005l-.004.01l-.017.428l.005.02l.01.013l.104.074l.015.004l.012-.004l.104-.074l.012-.016l.004-.017l-.017-.427q-.004-.016-.017-.018m.265-.113l-.013.002l-.185.093l-.01.01l-.003.011l.018.43l.005.012l.008.007l.201.093q.019.005.029-.008l.004-.014l-.034-.614q-.005-.018-.02-.022m-.715.002a.02.02 0 0 0-.027.006l-.006.014l-.034.614q.001.018.017.024l.015-.002l.201-.093l.01-.008l.004-.011l.017-.43l-.003-.012l-.01-.01z"></path><path fill="currentColor" d="M20.131 3.16a3 3 0 0 0-4.242 0l-.707.708l4.95 4.95l.706-.707a3 3 0 0 0 0-4.243l-.707-.707Zm-1.414 7.072l-4.95-4.95l-9.09 9.091a1.5 1.5 0 0 0-.401.724l-1.029 4.455a1 1 0 0 0 1.2 1.2l4.456-1.028a1.5 1.5 0 0 0 .723-.401z"></path></g></svg>
+                                        <span role='tooltip'>Anotar válvula</span>
+                                    </button>
+                                </AnnotationDropdown>
+                            )}
+                            <button 
+                                onClick={handleAdjustValve}
+                                className='flex items-center bg-white/10 rounded-lg py-2 px-4 space-x-2 text-white'
+                                title='Editar contorno'
+                            >
+                                Editar contorno
+                            </button>
+                            <button 
+                                onClick={handleConfirmValve}
+                                className='flex items-center bg-white/10 rounded-lg py-2 px-4 space-x-2 text-white'
+                                title='Confirmar válvula'
+                                disabled={!valveIdentified}
+                            >
+                                {valveConfirmations?.[currentFrame] ? 'Válvula confirmada' : 'Confirmar válvula'}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className='bg-red-dark/30 rounded-lg p-3 space-y-2'>
+                        <p className='text-xs uppercase tracking-[0.2em] text-white/70'>IA</p>
+                        <button 
+                            onClick={handleDetectCalcium} 
+                            className='flex items-center bg-red-dark rounded-lg py-2 px-4 space-x-2 text-white'
+                            title='Detetar calcificação'
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width={22} height={22} viewBox="0 0 24 24"><g fill="none"><path d="m12.594 23.258l-.012.002l-.071.035l-.02.004l-.014-.004l-.071-.036q-.016-.004-.024.006l-.004.01l-.017.428l.005.02l.01.013l.104.074l.015.004l.012-.004l.104-.074l.012-.016l.004-.017l-.017-.427q-.004-.016-.016-.018m.264-.113l-.014.002l-.184.093l-.01.01l-.003.011l.018.43l.005.012l.008.008l.201.092q.019.005.029-.008l.004-.014l-.034-.614q-.005-.019-.02-.022m-.715.002a.02.02 0 0 0-.027.006l-.006.014l-.034.614q.001.018.017.024l.015-.002l.201-.093l.01-.008l.003-.011l.018-.43l-.003-.012l-.01-.01z"></path><path fill="currentColor" d="M9.107 5.448c.598-1.75 3.016-1.803 3.725-.159l.06.16l.807 2.36a4 4 0 0 0 2.276 2.411l.217.081l2.36.806c1.75.598 1.803 3.016.16 3.725l-.16.06l-2.36.807a4 4 0 0 0-2.412 2.276l-.081.216l-.806 2.361c-.598 1.75-3.016 1.803-3.724.16l-.062-.16l-.806-2.36a4 4 0 0 0-2.276-2.412l-.216-.081l-2.36-.806c-1.751-.598-1.804-3.016-.16-3.724l.16-.062l2.36-.806A4 4 0 0 0 8.22 8.025l.081-.216zM19 2a1 1 0 0 1 .898.56l.048.117l.35 1.026l1.027.35a1 1 0 0 1 .118 1.845l-.118.048l-1.026.35l-.35 1.027A1 1 0 0 1 19 2"></path></g></svg>
+                            <span role='tooltip'>Detetar calcificação</span>
+                        </button>
+                    </div>
                 </div>
             </div>
             {/* Área de seleção */}
@@ -568,7 +693,7 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
                     onMouseMove={handleMouseMove}
                     onMouseUp={handleMouseUp}
                     onClick={() => setSelectedRect(null)}
-                    style={{ cursor: cursorType }}
+                    style={{ cursor: cursorType, ...imageFilterStyle }}
                 >
                     <Layer>
                         <Group 
@@ -726,10 +851,10 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
                     <div className='absolute inset-0 flex flex-col justify-center items-center'>
                         <p className='relative z-5 text-white text-xl font-semibold mb-8'>
                             {isLoadingValve 
-                                ? 'Identifying Aortic Valve Area...' 
+                                ? 'A identificar válvula...' 
                                 : isLoadingBatch
-                                ? `${batchProgress[frames[currentFrame]?.name]?.phase || 'Waiting for results from other frames'}...`
-                                : 'Searching for Calcium Deposits...'}
+                                ? `${batchProgress[frames[currentFrame]?.name]?.phase || 'A aguardar resultados de outras imagens'}...`
+                                : 'A analisar calcificação...'}
                         </p>
 
                         {/* Barra de progresso */}
@@ -749,7 +874,7 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
                             className='relative z-5 w-24 py-1 mt-4 text-center rounded-sm text-lg font-medium bg-red-dark text-white'
                             onClick={() => cancelSingleDetection()}
                         >
-                            Cancel
+                            Cancelar
                         </button>
                         <div className='absolute inset-0 bg-blue-400/10 backdrop-blur-xs' />
                     </div>
@@ -758,18 +883,18 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
                 {/* Caixa de texto com as coordenadas do retângulo selecionado */}
                 {selectedRect && (
                     <div className='absolute bottom-2 left-2 bg-gray-pale rounded-md w-60 h-32 px-3 py-2'>
-                        <h5 className='mb-4'>Bounding Box</h5>
+                        <h5 className='mb-4'>Caixa de seleção</h5>
                         
                         <div className='absolute top-3 right-3 flex gap-2'>
                             {/* Botão para retomar à posição identificada pelo modelo */}
                             {predictedValveBoxes[currentFrame] && (
-                                <button onClick={handleResetValvePosition} title='Reset AI Annotation'>
+                                <button onClick={handleResetValvePosition} title='Repor contorno IA'>
                                     <svg xmlns="http://www.w3.org/2000/svg" width={22} height={22} viewBox="0 0 24 24"><g fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}><path d="M12 3a9 9 0 1 1-5.657 2"></path><path d="M3 4.5h4v4"></path></g></svg>
                                 </button>
                             )}
 
                             {/* Botão para apagar a anotação selecionada */}
-                            <button onClick={handleClearAnnotations} title="Clear All">
+                            <button onClick={handleClearAnnotations} title="Limpar tudo">
                                 <svg xmlns="http://www.w3.org/2000/svg" width={22} height={22} viewBox="0 0 24 24"><path fill="currentColor" fillRule="evenodd" d="M8.106 2.553A1 1 0 0 1 9 2h6a1 1 0 0 1 .894.553L17.618 6H20a1 1 0 1 1 0 2h-1v11a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V8H4a1 1 0 0 1 0-2h2.382zM14.382 4l1 2H8.618l1-2zM11 11a1 1 0 1 0-2 0v6a1 1 0 1 0 2 0zm4 0a1 1 0 1 0-2 0v6a1 1 0 1 0 2 0z" clipRule="evenodd"></path></svg>
                             </button>
                         </div>
@@ -842,9 +967,9 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
                         title="Batch Valve Identification Tool"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" width={24} height={24} viewBox="0 0 24 24"><path fill="none" stroke="currentColor" strokeWidth={2} d="M19 15h4V1H9v4m6 14h4V5H5v4M1 23h14V9H1z"></path></svg>
-                        <span role='tooltip'>Batch Analysis</span>
+                        <span role='tooltip'>Análise em lote</span>
                     </button>
-                    <em className="text-sm text-gray-light leading-4">* Both valve identification and calcium detection.</em>
+                    <em className="text-sm text-gray-light leading-4">* Identificação da válvula e calcificação.</em>
                 </div>
             </div>
         </div>

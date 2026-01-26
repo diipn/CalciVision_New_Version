@@ -67,7 +67,7 @@ function AnnotationToolSlider({ frames, rects, currentFrame, setCurrentFrame, ba
                             {isLoading && (
                                 <div className='absolute inset-0 flex flex-col justify-center items-center'>
                                     <span role='status' className='relative z-5 w-8 h-8 rounded-full border-3 border-gray-pale border-t-blue-800 animate-spin' />
-                                    <div className='absolute inset-0 bg-blue-400/10 backdrop-blur-xs rounded-md' />
+                                    <div className='absolute inset-0 bg-green-400/10 backdrop-blur-xs rounded-md' />
                                 </div>
                             )}
                         </div>

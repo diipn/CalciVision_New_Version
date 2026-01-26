@@ -4,7 +4,7 @@ import { useUnsavedStore } from "../store/useUnsavedStore";
 
 export default function Navbar() {
   return (
-    <nav className="no-scrollbar w-80 h-[var(--content-height)] p-5 bg-red-light border-r-gray-medium border-r-[1px] overflow-auto">
+    <nav className="no-scrollbar w-80 h-[var(--content-height)] p-5 bg-green-light border-r-gray-medium border-r-[1px] overflow-auto">
       <ul className="flex flex-col" role='navigation'>
         <ul className="flex flex-col gap-2">
           <NavItem name="Home" url="/">
@@ -72,12 +72,12 @@ function NavItem({ name, url, highlight = false, children }) {
   }, [location, url]);
 
   return (
-    <li className={`nav-link group font-medium p-2 rounded-lg cursor-pointer ${highlight ? 'hover:bg-[#e36d6d]' : 'hover:bg-red-pale'} transition-colors duration-250 *:transition-colors *:duration-250 ${highlight ? 'bg-red text-white' : active ? 'bg-red-pale' : 'bg-transparent'}`}>
+    <li className={`nav-link group font-medium p-2 rounded-lg cursor-pointer ${highlight ? 'hover:bg-green-dark' : 'hover:bg-green-pale'} transition-colors duration-250 *:transition-colors *:duration-250 ${highlight ? 'bg-green text-white' : active ? 'bg-green-pale' : 'bg-transparent'}`}>
       <button onClick={handleClick} className='flex items-center w-full h-full' role='link'>
-        <div className={`grid place-items-center ml-1 mr-3 ${!highlight ? 'group-hover:fill-red group-hover:text-red' : ''} ${active ? 'fill-red-dark text-red-dark' : 'fill-current text-current'}`}>
+        <div className={`grid place-items-center ml-1 mr-3 ${!highlight ? 'group-hover:fill-green group-hover:text-green' : ''} ${active ? 'fill-green-dark text-green-dark' : 'fill-current text-current'}`}>
           {children}
         </div>
-        <span className={`text-lg ${!highlight ? 'group-hover:text-red' : 'text-white'} ${active ? 'text-red-dark' : 'text-gray-dark'}`}>
+        <span className={`text-lg ${!highlight ? 'group-hover:text-green' : 'text-white'} ${active ? 'text-green-dark' : 'text-gray-dark'}`}>
           {name}
         </span>
       </button>

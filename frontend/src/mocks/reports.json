@@ -1,0 +1,14 @@
+[
+  {
+    "id": 501,
+    "patientId": 3,
+    "patient": 3,
+    "examId": 301,
+    "created_at": "2024-05-23T09:30:00Z",
+    "reportText": "Relatório gerado automaticamente com base no exame e na variável objetiva.",
+    "pdf_name": "report_marta_silva_20240523.pdf",
+    "pdf_size": 248,
+    "report_url": "https://example.com/report_marta_silva_20240523.pdf",
+    "hasCalcification": false
+  }
+]

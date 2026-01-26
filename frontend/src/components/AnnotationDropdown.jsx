@@ -11,7 +11,7 @@ export default function AnnotationDropdown({ children, handleDectectValve, toggl
             <DropdownMenu.Portal className="rounded-b-sm shadow-[0px_10px_38px_-10px_rgba(22,_23,_24,_0.35),_0px_10px_20px_-15px_rgba(22,_23,_24,_0.2)]">
                 <DropdownMenu.Content className="bg-white min-w-30 w-55 p-1 space-y-1" align="start" sideOffset={5}>
                     <DropdownMenu.Item 
-                        className="group p-2 pl-4 rounded-sm flex items-center gap-4 relative select-none leading-none text-gray-dark outline-none data-[disabled]:pointer-events-none data-[highlighted]:bg-red data-[disabled]:text-gray-dark data-[highlighted]:text-white cursor-pointer"
+                        className="group p-2 pl-4 rounded-sm flex items-center gap-4 relative select-none leading-none text-gray-dark outline-none data-[disabled]:pointer-events-none data-[highlighted]:bg-green data-[disabled]:text-gray-dark data-[highlighted]:text-white cursor-pointer"
                         onClick={handleDectectValve}
                         title="AI Valve Detection Tool"
                     >
@@ -19,7 +19,7 @@ export default function AnnotationDropdown({ children, handleDectectValve, toggl
                         <span role='tooltip'>AI Detection</span>
                     </DropdownMenu.Item>
                     <DropdownMenu.Item 
-                        className="group p-2 pl-4 rounded-sm flex items-center gap-4 relative select-none leading-none text-gray-dark outline-none data-[disabled]:pointer-events-none data-[highlighted]:bg-red data-[disabled]:text-gray-medium data-[highlighted]:text-white cursor-pointer"
+                        className="group p-2 pl-4 rounded-sm flex items-center gap-4 relative select-none leading-none text-gray-dark outline-none data-[disabled]:pointer-events-none data-[highlighted]:bg-green data-[disabled]:text-gray-medium data-[highlighted]:text-white cursor-pointer"
                         onClick={toggleDrawingMode}
                         disabled={annotated}
                         title="Aortic Valve Segmentation"

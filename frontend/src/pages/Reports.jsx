@@ -72,7 +72,7 @@ const Reports = () => {
                 <div className="mb-8">
                     <h2 className="text-lg font-semibold mb-4">Select Patient</h2>
                     <div>
-                        <table className="w-full table-fixed bg-red-light shadow-md">
+                        <table className="w-full table-fixed bg-green-light shadow-md">
                             <thead className='border-b-2'>
                                 <tr>
                                     <th className='w-[9%] p-3 text-center'>Select</th>
@@ -147,7 +147,7 @@ const Reports = () => {
                                 </div>
 
                                 <button
-                                    className="bg-red text-white py-2 px-4 rounded"
+                                    className="bg-green text-white py-2 px-4 rounded"
                                     onClick={async () => {
                                         if (!selectedPatientId) {
                                             alert("Selecione um paciente!");

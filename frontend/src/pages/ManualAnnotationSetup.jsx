@@ -31,13 +31,12 @@ export default function ManualAnnotationSetup() {
   const [uploadError, setUploadError] = useState("");
   const navigate = useNavigate();
 
-  const fetchPatients = async () => {
-    const response = await api.get("/api/patients-with-ecos/");
-    setPatients(response.data);
-    return response.data;
-  };
-
   useEffect(() => {
+    const fetchPatients = async () => {
+      const response = await api.get("/api/patients-with-ecos/");
+      setPatients(response.data);
+    };
+
     fetchPatients();
   }, []);
 
@@ -88,19 +87,10 @@ export default function ManualAnnotationSetup() {
     setUploadError("");
     try {
       const description = `ECO TEE (${formatDateLabel()})`;
-      await createExamWithFrames(selectedPatientId, description, files);
-      const refreshedPatients = await fetchPatients();
-      const updatedPatient = refreshedPatients.find(
-        (patient) => String(patient.id) === String(selectedPatientId)
-      );
-      const latestEcho = [...(updatedPatient?.echocardiograms || [])].sort((a, b) => {
-        const dateA = a?.uploaded_at ? new Date(a.uploaded_at) : 0;
-        const dateB = b?.uploaded_at ? new Date(b.uploaded_at) : 0;
-        return dateB - dateA;
-      })[0];
+      const newExam = await createExamWithFrames(selectedPatientId, description, files);
       setUploadedFiles(files);
       setUploadCount(files.length);
-      setSelectedEchoId(latestEcho?.id ? String(latestEcho.id) : "");
+      setSelectedEchoId(newExam.id);
     } catch (error) {
       console.error(error);
       setUploadError("Erro ao carregar o ecocardiograma. Tente novamente.");
@@ -116,7 +106,7 @@ export default function ManualAnnotationSetup() {
 
   return (
     <MainLayout pageTitle="Iniciar análise - CalciVision">
-      <div className="max-w-lg space-y-6">
+      <div className="max-w-xl space-y-6">
         <header className="space-y-2">
           <h3 className="text-xl font-semibold">Iniciar análise</h3>
           <p className="text-gray-600">Seleccione o doente e o ecocardiograma a analisar.</p>
@@ -192,23 +182,17 @@ export default function ManualAnnotationSetup() {
 
             {echoMode === "upload" && (
               <div className="mt-4 space-y-3">
-                <label
-                  htmlFor="echocardiogram-upload"
-                  className={`inline-flex items-center gap-3 ${
-                    selectedPatientId && !uploading ? "cursor-pointer" : "cursor-not-allowed"
-                  }`}
-                >
+                <label className="inline-flex items-center gap-3">
                   <span className={`w-fit rounded-md px-4 py-2 text-sm font-semibold text-white ${
-                    selectedPatientId && !uploading ? "bg-green-dark" : "bg-gray-medium"
+                    selectedPatientId ? "bg-green-dark" : "bg-gray-medium"
                   }`}>
-                    Carregar novo ecocardiograma
+                    Carregar ecocardiograma
                   </span>
                   <input
-                    id="echocardiogram-upload"
                     type="file"
                     multiple
                     accept=".dcm,application/dicom,image/*"
-                    className="sr-only"
+                    className="hidden"
                     onChange={handleUpload}
                     disabled={!selectedPatientId || uploading}
                   />

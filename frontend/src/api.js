@@ -150,8 +150,9 @@ export const createExamWithFrames = async (patientId, description, frames) => {
     return mockDb.addExamWithFrames(patientId, description, payload);
   }
   const formData = new FormData();
+  formData.append("description", description);
   frames.forEach((frame) => {
-    formData.append("echoDicom", frame);
+    formData.append("frames", frame);
   });
   const response = await api.post(`/api/patient/${patientId}/echocardiogram/add/`, formData, {
     headers: { "Content-Type": "multipart/form-data" },

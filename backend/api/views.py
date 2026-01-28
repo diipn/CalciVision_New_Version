@@ -3,7 +3,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.conf import settings
 from .tasks import run_calcium_model, run_valve_model, batch_valve_detection, crop_valve_image, save_frame_from_patient_screening
-from .utils import process_echocardiogram
+from .utils import process_echocardiogram, get_screening_progress_key
 from celery import chain
 import redis
 
@@ -31,7 +31,7 @@ def hello(request: HttpRequest):
 @permission_classes([IsAuthenticated])
 def patient_screening_status(request: HttpRequest, task_id: str):
     r = redis.Redis.from_url(settings.REDIS_URL)  # Ajustar REDIS_URL
-    data = r.get(f"screening_progress:task_{task_id}")
+    data = r.get(get_screening_progress_key(task_id))
     if data:
         return Response(json.loads(data), status=status.HTTP_200_OK)
     return Response({ "error": "Patient Screening not found or not started" }, status=status.HTTP_404_NOT_FOUND)
@@ -134,6 +134,16 @@ def identify_valve(request: HttpRequest):
         'image_bytes': image_bytes,
         'image_name': image_name,
     })
+
+    logger.info(
+        "identify_valve task queued",
+        extra={
+            "task_id": task.task_id,
+            "user": getattr(request.user, "id", None),
+            "image_name": image_name,
+            "image_size_bytes": len(image_bytes),
+        },
+    )
         
     return Response({ 'message': 'The task was added to the queue.', 'task_id': task.task_id }, status=status.HTTP_202_ACCEPTED)
 
@@ -566,15 +576,25 @@ def add_echocardiogram(request: HttpRequest, patient_id: int):
     
     processed = 0
     failed = []
+    created_echos = []
     
     # Processa cada um dos DICOMs recebidos
     for dicom in dicom_files:
         try:
-            process_echocardiogram(dicom, patient)
+            echo = process_echocardiogram(dicom, patient)
+            if echo:
+                created_echos.append(echo)
             processed += 1
         except Exception as e:
             failed.append({ 'filename': dicom.name, 'error': str(e) })
     
+    if processed == 0:
+        first_error = failed[0].get('error') if failed else None
+        return Response({
+            'error': f'Não foi possível processar os DICOMs enviados.{f" {first_error}" if first_error else ""}',
+            'errors': failed,
+        }, status=status.HTTP_400_BAD_REQUEST)
+
     # Atualiza a data de modificação do paciente
     if processed > 0:
         echos = Echocardiogram.objects.filter(patient=patient)
@@ -589,9 +609,12 @@ def add_echocardiogram(request: HttpRequest, patient_id: int):
         patient.updated_at = timezone.now()
         patient.save(update_fields=['status', 'updated_at'])
         
+    created_ids = [echo.id for echo in created_echos]
     return Response({
         'message': f'{processed} DICOMs processed successfully',
         'errors': failed,
+        'echo_ids': created_ids,
+        'echo_id': created_ids[-1] if created_ids else None,
     }, status=status.HTTP_207_MULTI_STATUS if failed else status.HTTP_201_CREATED)
     
     

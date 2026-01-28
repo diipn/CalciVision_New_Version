@@ -1,6 +1,6 @@
 import { Navigate } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
-import api, { useMockApi } from "../api";
+import api from "../api";
 import { ACCESS_TOKEN, REFRESH_TOKEN } from "../constants";
 import { useState, useEffect } from "react";
 
@@ -8,10 +8,6 @@ function ProtectedRoute({ children }) {
     const [isAuthorized, setIsAuthorized] = useState(null);
 
     useEffect(() => {
-        if (useMockApi) {
-            setIsAuthorized(true);
-            return;
-        }
         auth().catch(() => setIsAuthorized(false));
     }, []);
 
@@ -51,7 +47,7 @@ function ProtectedRoute({ children }) {
     }
 
     if(isAuthorized === null) {
-        return <div>Loading...</div>
+        return <div>A carregar...</div>
     }
 
     return isAuthorized ? children : <Navigate to="/login" />;

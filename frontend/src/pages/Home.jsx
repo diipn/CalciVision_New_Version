@@ -14,48 +14,48 @@ const Home = () => {
 
   const [greeting] = useState(() => {
     const currentHour = new Date().getHours()
-    if(currentHour < 12) return 'Good Morning,'
-    else if(currentHour < 18) return 'Good Afternoon,'
-    else if(currentHour < 22) return 'Good Evening,'
-    else return 'Good Night,'
+    if(currentHour < 12) return 'Bom dia,'
+    else if(currentHour < 18) return 'Boa tarde,'
+    else if(currentHour < 22) return 'Boa noite,'
+    else return 'Boa noite,'
   })
   const { user } = useUser()
 
   return (
-    <MainLayout pageTitle="Home - CalciVision">
+    <MainLayout pageTitle="Início - CalciVision">
       
       <div className="grid grid-cols-[1fr_24rem] gap-10">
         <div className="flex flex-col gap-4">
           <div className="flex w-full min-w-150 bg-gradient-to-r from-red to-red-dark rounded-xl px-10 py-6 shadow-lg text-white font-light">
             <div className="flex flex-col gap-2 pr-4">
               <p className="text-lg mb-2">
-                {greeting && greeting || 'Welcome back,'}
+                {greeting && greeting || 'Bem-vindo de volta,'}
               </p>
               <strong className="text-3xl font-semibold">
-                {user && `Dr. ${user.first_name} ${user.last_name}` || 'Doctor'}
+                {user && `Dr. ${user.first_name} ${user.last_name}` || 'Médico'}
               </strong>
               <p className="text-gray-pale text-md">
                 Hospital de Santa Maria
               </p>
               <div className="flex flex-col gap-2 mt-5">
                 <p className="text-lg">
-                  Here’s what happened while you’ve been out:
+                  Eis o que aconteceu entretanto:
                 </p>
                 <ul className="list-disc list-inside">
                   <li className="py-1">
-                    <span className="text-yellow">New MRI images</span> were uploaded (12)
+                    <span className="text-yellow">Novas imagens de RM</span> foram carregadas (12)
                   </li>
                   <li className="py-1">
-                    <span className="text-yellow">Valve Calcification Detection</span> completed (5)
+                    <span className="text-yellow">Deteção de calcificação</span> concluída (5)
                   </li>
-                  <li className="py-1">Patients awaiting reports (10)</li>
+                  <li className="py-1">Doentes a aguardar relatórios (10)</li>
                 </ul>
               </div>
             </div>
             <div className="w-2/5 ml-auto aspect-square">
               <img
                 src={welcomeImage}
-                alt="Welcome back"
+                alt="Boas-vindas"
                 role="img"
                 className="object-contain w-full h-full"
               />
@@ -63,25 +63,25 @@ const Home = () => {
           </div>
           <div className="flex gap-4">
             <div className="bg-green rounded-lg shadow-lg overflow-hidden">
-              <img src={AIDetectionImage} alt="AI Detection" role="img" className="object-cover w-full h-36" />
+              <img src={AIDetectionImage} alt="Classificação por IA" role="img" className="object-cover w-full h-36" />
               <div className="px-6 py-4 text-white">
-                <h4 className="font-medium mb-2">AI Classification</h4>
-                <p className="font-light text-sm text-gray-soft">Automated Echocardiographic and MRI Annotation and Valve Calcification Detection Tool powered by our AI models.</p>
+                <h4 className="font-medium mb-2">Classificação por IA</h4>
+                <p className="font-light text-sm text-gray-soft">Ferramenta automática de anotação ecocardiográfica e deteção de calcificação com apoio dos nossos modelos de IA.</p>
                 <div role="button" className="w-full max-w-30 m-auto py-2 mt-4 text-center rounded-sm text-lg font-medium bg-green-dark">
                   <Link to="/select_echo" target="_blank">
-                    Start
+                    Iniciar
                   </Link>
                 </div>
               </div>
             </div>
             <div className="bg-gray-light rounded-lg shadow-lg overflow-hidden">
-              <img src={ReportsImage} alt="Automatic Reports" role="img" className="object-cover w-full h-36" />
+              <img src={ReportsImage} alt="Relatórios automáticos" role="img" className="object-cover w-full h-36" />
               <div className="px-6 py-4 text-gray-dark">
-                <h4 className="font-medium mb-2">Automatic Reports</h4>
-                <p className="font-light text-sm text-gray-dark">Generate complete echocardiographic reports regarding aortic valve clasification for any patient with our AI.</p>
+                <h4 className="font-medium mb-2">Relatórios automáticos</h4>
+                <p className="font-light text-sm text-gray-dark">Gere relatórios ecocardiográficos completos da válvula aórtica com apoio da IA.</p>
                 <div role="button" className="w-full max-w-30 m-auto py-2 mt-4 text-center rounded-sm text-lg font-medium bg-green-dark text-white">
                   <Link to="/reports" target="_blank">
-                    Start
+                    Iniciar
                   </Link>
                 </div>
               </div>

@@ -1,6 +1,6 @@
 import { AlertDialog } from 'radix-ui'
 
-export default function AlertDialogMenu({ children, heading, content, hasCancel=true, confirmText="Confirm", onConfirm }) {
+export default function AlertDialogMenu({ children, heading, content, hasCancel=true, confirmText="Confirmar", onConfirm }) {
     
     return (
         <AlertDialog.Root>
@@ -20,7 +20,7 @@ export default function AlertDialogMenu({ children, heading, content, hasCancel=
                         {hasCancel && (
                             <AlertDialog.Cancel asChild>
                                 <button className="inline-flex h-[35px] items-center justify-center rounded px-[15px] font-medium leading-none text-red-dark select-none">
-                                    Cancel
+                                    Cancelar
                                 </button>
                             </AlertDialog.Cancel>
                         )}

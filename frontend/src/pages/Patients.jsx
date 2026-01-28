@@ -11,122 +11,168 @@ import { useSearchParams } from 'react-router-dom';
 import AlertDialogMenu from '../components/AlertDialogMenu';
 import { usePatientScreening } from '../hooks/usePatientScreening';
 
+const getRiskLabel = (vo) => {
+  if (vo === undefined || vo === null) return null;
+  if (vo < 0.33) return 'Baixo';
+  if (vo < 0.66) return 'Médio';
+  return 'Alto';
+};
+
 export default function Patients() {
 
   const [patients, setPatients] = useState([]);
   const [filteredPatients, setFilteredPatients] = useState([]);
 
-  const [searchTerm, setSearchTerm] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [riskFilter, setRiskFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [loading, setLoading] = useState(true);
   const [showRegister, setShowRegister] = useState(false);
   const { startScreening } = usePatientScreening();
 
   const [searchParams] = useSearchParams();
 
-  const pendingPatients = patients.filter(patient => patient.status === 'PENDING' && patient.echocardiograms.length > 0)
+  const pendingPatients = patients.filter(patient => patient.status === 'PENDING' && patient.echocardiograms.length > 0);
 
   const fetchPatients = async () => {
     try {
-      const data = await getPatients()
-      setPatients(data)
-      setFilteredPatients(data)
+      const data = await getPatients();
+      setPatients(data);
+      setFilteredPatients(data);
     } catch (error) {
-      console.error(error)
+      console.error(error);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   useEffect(() => {
-    fetchPatients()
+    fetchPatients();
   }, []);
 
   useEffect(() => {
-    if (!searchTerm) {
-      setFilteredPatients(patients)
-      return
-    }
-    setFilteredPatients(() =>
-      patients.filter(patient => patient.name.toLowerCase().includes(searchTerm))
-    )
-  }, [searchTerm])
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    const filtered = patients.filter((patient) => {
+      const matchesName = normalizedSearch
+        ? patient.name.toLowerCase().includes(normalizedSearch)
+        : true;
 
-  const handleSearchType = (e) => {
-    setSearchTerm(e.target.value !== '' ? e.target.value.toLowerCase() : null)
-  }
+      const matchesRisk = riskFilter
+        ? patient.echocardiograms?.some((echo) => getRiskLabel(echo.vo) === riskFilter)
+        : true;
+
+      const matchesDate =
+        dateFrom || dateTo
+          ? patient.echocardiograms?.some((echo) => {
+              const echoDate = new Date(echo.date || echo.uploaded_at);
+              const fromOk = dateFrom ? echoDate >= new Date(dateFrom) : true;
+              const toOk = dateTo ? echoDate <= new Date(dateTo) : true;
+              return fromOk && toOk;
+            })
+          : true;
+
+      return matchesName && matchesRisk && matchesDate;
+    });
+
+    setFilteredPatients(filtered);
+  }, [patients, searchTerm, riskFilter, dateFrom, dateTo]);
 
   const handlePatientScreening = async () => {
     try {
-      await startScreening()
-    } catch(error) {
-      console.error('Error during patient screening:', error)
+      await startScreening();
+    } catch (error) {
+      console.error('Erro durante a triagem automática:', error);
     }
-  }
+  };
 
   return (
-    <MainLayout pageTitle="Patients - CalciVision">
-      
+    <MainLayout pageTitle="Doentes - CalciVision">
+
       {showRegister && (
         <PatientRegister onClose={() => setShowRegister(false)} />
       )}
 
-      <h3 className='mb-4'>Patients</h3>
-      <p className='text-lg mb-8'>On this page you can manage all your patients, view echocardiograms and access aortic valve analysis reports.</p>
-      <div className='flex justify-start items-center mb-5'>
-        <div className='mr-auto flex items-center gap-4'>
+      <h3 className='mb-4'>Doentes</h3>
+      <p className='text-lg mb-8'>Nesta página pode gerir todos os doentes, consultar ecocardiogramas e aceder a relatórios da válvula aórtica.</p>
+      <div className='flex flex-wrap justify-start items-center mb-5 gap-4'>
+        <div className='mr-auto flex items-center gap-4 flex-wrap'>
           <button
             className='w-fit py-1 px-3 flex items-center gap-2 rounded-lg bg-green text-white'
             onClick={() => setShowRegister(true)}
           >
-            Add New Patient
-            <img className='w-5 h-5 object-contain' src={addIcon} alt="Add" role="icon" />
+            Adicionar doente
+            <img className='w-5 h-5 object-contain' src={addIcon} alt="Adicionar" role="icon" />
           </button>
 
           <AlertDialogMenu
-            heading='Patient Screening Preview'
+            heading='Pré-visualização da triagem'
             content={
               pendingPatients.length === 0 ? (
-                <p className='text-red'>No patients with pending echocardiographic assessments.</p>
+                <p className='text-red'>Não existem doentes com avaliações pendentes.</p>
               ) : (
                 <div className='flex flex-col gap-2'>
-                  <p>You are about to initiate automated analysis for all patients with pending echocardiographic assessments.</p>
+                  <p>Vai iniciar a análise automática para todos os doentes com ecocardiogramas pendentes.</p>
                   {pendingPatients.length <= 3 ? (
-                    <p>A total of <strong>{pendingPatients.length} patient(s)</strong> have been selected: {pendingPatients.map(p => p.name).join(', ')}.</p>
+                    <p>Foram selecionados <strong>{pendingPatients.length} doente(s)</strong>: {pendingPatients.map(p => p.name).join(', ')}.</p>
                   ) : (
-                    <p>A total of <strong>{pendingPatients.length} patients</strong> have been selected, including {pendingPatients.slice(0, 3).map(p => p.name).join(', ')} and {pendingPatients.length - 3} additional individuals.</p>
+                    <p>Foram selecionados <strong>{pendingPatients.length} doentes</strong>, incluindo {pendingPatients.slice(0, 3).map(p => p.name).join(', ')} e mais {pendingPatients.length - 3} adicionais.</p>
                   )}
-                  <p>Would you like to proceed?</p>
+                  <p>Deseja continuar?</p>
                 </div>
-              )}
+              )
+            }
             onConfirm={handlePatientScreening}
           >
             <button className='w-fit py-1 px-3 flex items-center gap-2 rounded-lg bg-green text-white'>
-              Patient Screening
-              <img className='w-5 h-5 object-contain' src={patientScreeningIcon} alt="Patient Screening" role="icon" />
+              Triagem automática
+              <img className='w-5 h-5 object-contain' src={patientScreeningIcon} alt="Triagem automática" role="icon" />
             </button>
           </AlertDialogMenu>
         </div>
         <div className='w-fit px-3 mr-4 flex items-center rounded-lg outline-1 bg-white outline-gray-medium-dark'>
           <button className='w-4 h-4 mr-2 grid place-items-center bg-transparent cursor-pointer'>
-            <img className='w-full h-full object-contain' src={magnifyingGlassIcon} alt="Search" role="icon" />
+            <img className='w-full h-full object-contain' src={magnifyingGlassIcon} alt="Pesquisar" role="icon" />
           </button>
           <input
             id='search-input'
             type='search'
             autoComplete='on'
             role='input'
-            placeholder='Search'
+            placeholder='Pesquisar doente'
             className='w-48 grow p-1 outline-none'
-            onChange={handleSearchType}
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
           />
         </div>
-        <button className='w-fit py-1 px-3 flex items-center gap-2 rounded-lg outline-1 outline-gray-dark'>
-          <img className='w-4 h-4 object-contain' src={filterIcon} alt="Search" role="icon" />
-          <span>Add Filter</span>
-        </button>
+        <div className='flex items-center gap-2'>
+          <img className='w-4 h-4 object-contain' src={filterIcon} alt="Filtro" role="icon" />
+          <select
+            className='px-2 py-1 rounded-lg border border-gray-medium-dark'
+            value={riskFilter}
+            onChange={(event) => setRiskFilter(event.target.value)}
+          >
+            <option value=''>Risco (todos)</option>
+            <option value='Baixo'>Baixo</option>
+            <option value='Médio'>Médio</option>
+            <option value='Alto'>Alto</option>
+          </select>
+          <input
+            type='date'
+            className='px-2 py-1 rounded-lg border border-gray-medium-dark'
+            value={dateFrom}
+            onChange={(event) => setDateFrom(event.target.value)}
+          />
+          <input
+            type='date'
+            className='px-2 py-1 rounded-lg border border-gray-medium-dark'
+            value={dateTo}
+            onChange={(event) => setDateTo(event.target.value)}
+          />
+        </div>
       </div>
       {loading ? (
-        <div>Fetching patients...</div>
+        <div>A carregar doentes...</div>
       ) : (
         <PatientList
           patients={filteredPatients}

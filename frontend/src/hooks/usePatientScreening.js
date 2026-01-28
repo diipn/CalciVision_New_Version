@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
-import api, { useMockApi } from "../api";
+import api from "../api";
 import { useBatchProgressStore } from '../store/useBatchProgressStore';
+import { buildModelWsUrl } from '../utils/ws';
 
 export function usePatientScreening() {
   const [loading, setLoading] = useState(false);
@@ -36,11 +37,6 @@ export function usePatientScreening() {
   };
 
   const connectPatientScreening = async () => {
-    if (useMockApi) {
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
 
     // Atualiza os dados mais recentes dos batches
@@ -49,7 +45,7 @@ export function usePatientScreening() {
     activeBatches.forEach(({ task_id, echo, patient, frame_id }) => {
       if (sockets.current[task_id]) return; // Já está conectado
 
-      const socket = new WebSocket(import.meta.env.VITE_WEBSOCKET_URL + `model/${task_id}/`);
+      const socket = new WebSocket(buildModelWsUrl(task_id));
 
       if (!sockets.current) sockets.current = {};
       sockets.current[task_id] = socket;

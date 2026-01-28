@@ -1,34 +1,23 @@
 import { useState } from 'react';
-import api, { useMockApi } from '../api';
+import api from '../api';
+import { buildModelWsUrl } from '../utils/ws';
 
 export function useCalciumDetection() {
   const [progress, setProgress] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const wsErrorMessage =
+    'Não foi possível ligar ao serviço de IA. Verifique se o backend está activo.';
 
   /**
    * Inicia a deteção de cálcio na válvula aórtica.
    */
   const startDetection = async (image, bbox) => {
     if (!image) return;
-    if (useMockApi) {
-      setIsLoading(true);
-      setProgress(45);
-      return new Promise((resolve) => {
-        setTimeout(() => {
-          const binary = Math.random() > 0.5;
-          setProgress(100);
-          setIsLoading(false);
-          resolve({
-            binary_classification: binary,
-            confidence: binary ? 0.82 : 0.18,
-            is_calcification_generated: true,
-          });
-          setProgress(0);
-        }, 650);
-      });
-    }
 
     setIsLoading(true);
+    setError(null);
     try {
       // Converter a imagem num BLOB (formato binário)
       let blob;
@@ -60,16 +49,24 @@ export function useCalciumDetection() {
       console.log('Task ID:', taskId);
 
       // Criação de uma conexão WebSocket para ir recebendo o progresso e os resultados
-      const socket = new WebSocket(import.meta.env.VITE_WEBSOCKET_URL + `model/${taskId}/`);
+      const wsUrl = buildModelWsUrl(taskId);
+      if (!wsUrl) {
+        setIsLoading(false);
+        setError(wsErrorMessage);
+        throw new Error('WebSocket URL inválido.');
+      }
+      const socket = new WebSocket(wsUrl);
 
       // A Promise impede que o fluxo do componente continue até ter um resolve ou reject
       return new Promise((resolve, reject) => {
+        let settled = false;
         socket.onmessage = function (event) {
           const data = JSON.parse(event.data);
           setProgress(data.progress || 0);
           console.log('Mensagem recebida do WebSocket:', data);
           const resultsReady = data.results !== undefined;
           if (resultsReady) {
+            settled = true;
             socket.close();
             data.results.binary_classification = Boolean(data.results.binary_classification);
             setTimeout(() => {
@@ -81,10 +78,18 @@ export function useCalciumDetection() {
         };
         socket.onerror = (error) => {
           socket.close();
+          if (!settled) {
+            setIsLoading(false);
+            setError(wsErrorMessage);
+          }
           reject(error);
         };
         socket.onclose = () => {
           console.log('Conexão WebSocket fechada.');
+          if (!settled) {
+            setIsLoading(false);
+            setError(wsErrorMessage);
+          }
         };
       });
     } catch (error) {
@@ -92,5 +97,5 @@ export function useCalciumDetection() {
     }
   };
 
-  return { progress, isLoading, startDetection };
+  return { progress, isLoading, error, startDetection };
 }

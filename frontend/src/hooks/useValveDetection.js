@@ -1,27 +1,25 @@
-import { useState } from 'react';
-import api, { useMockApi } from '../api';
+import { useRef, useState } from 'react';
+import api from '../api';
+import { buildModelWsUrl } from '../utils/ws';
 
 export function useValveDetection() {
   const [progress, setProgress] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [socket, setSocket] = useState(null);
+  const [error, setError] = useState(null);
+  const lastImageRef = useRef(null);
+
+  const wsErrorMessage =
+    'Não foi possível ligar ao serviço de IA. Verifique se o backend está activo.';
+  const slowDetectionMessage =
+    'A deteção está a demorar mais do que o esperado. Verifique se o worker Celery está activo.';
 
   const startDetection = async (image) => {
     if (!image) return;
-    if (useMockApi) {
-      setIsLoading(true);
-      setProgress(40);
-      return new Promise((resolve) => {
-        setTimeout(() => {
-          setProgress(100);
-          setIsLoading(false);
-          resolve({ bbox: [120, 90, 260, 210] });
-          setProgress(0);
-        }, 600);
-      });
-    }
 
+    lastImageRef.current = image;
     setIsLoading(true);
+    setError(null);
     try {
       let blob;
       if (image instanceof File) {
@@ -45,16 +43,36 @@ export function useValveDetection() {
       const taskId = response.data.task_id;
 
       // Criação de uma conexão WebSocket para ir recebendo o progresso e os resultados
-      const socket = new WebSocket(import.meta.env.VITE_WEBSOCKET_URL + `model/${taskId}/`);
+      const wsUrl = buildModelWsUrl(taskId);
+      console.log('WS ValveDetection ->', wsUrl);
+      if (!wsUrl) {
+        setIsLoading(false);
+        setError(wsErrorMessage);
+        throw new Error('WebSocket URL inválido.');
+      }
+      const socket = new WebSocket(wsUrl);
       setSocket(socket);
       // A Promise impede que o fluxo do componente continue até ter um resolve ou reject
       return new Promise((resolve, reject) => {
+        let settled = false;
+        let receivedAnyMessage = false;
+        const timeoutId = setTimeout(() => {
+          if (!receivedAnyMessage) {
+            setError(slowDetectionMessage);
+          }
+        }, 12000);
         socket.onmessage = function (event) {
+          if (!receivedAnyMessage) {
+            setError(null);
+          }
+          receivedAnyMessage = true;
+          clearTimeout(timeoutId);
           const data = JSON.parse(event.data);
           setProgress(data.progress || 0);
           console.log('Mensagem recebida do WebSocket:', data);
           const resultsReady = data.results !== undefined;
           if (resultsReady) {
+            settled = true;
             socket.close();
             setTimeout(() => {
               setIsLoading(false);
@@ -64,11 +82,21 @@ export function useValveDetection() {
           }
         };
         socket.onerror = (error) => {
+          clearTimeout(timeoutId);
           socket.close();
+          if (!settled) {
+            setIsLoading(false);
+            setError(wsErrorMessage);
+          }
           reject(error);
         };
         socket.onclose = () => {
+          clearTimeout(timeoutId);
           console.log('Conexão WebSocket fechada.');
+          if (!settled) {
+            setIsLoading(false);
+            setError(wsErrorMessage);
+          }
         };
       });
     } catch (error) {
@@ -81,5 +109,11 @@ export function useValveDetection() {
     setIsLoading(false);
   };
 
-  return { progress, isLoading, startDetection, cancelDetection };
+  const retryDetection = () => {
+    if (!lastImageRef.current) return;
+    cancelDetection();
+    return startDetection(lastImageRef.current);
+  };
+
+  return { progress, isLoading, error, startDetection, cancelDetection, retryDetection, slowDetectionMessage };
 }

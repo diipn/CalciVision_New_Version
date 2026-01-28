@@ -97,12 +97,45 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
   /* Quando o médico submete, os dados do ecocardiograma e frames devem ser atualizados */
   const handleUpdateEcho = async (completed) => {
     try {
-      const results = frames.map((frame, frameIndex) => ({
-        frame_id: frame.id,
-        rects: [...rects[frameIndex]],
-        is_calcified: calcificationStatus,
-        generated_calcium: calcification[frameIndex]?.is_calcification_generated,
-      }));
+      const results = frames.map((frame, frameIndex) => {
+        const frameRects = Array.isArray(rects?.[frameIndex]) ? rects[frameIndex] : [];
+        const cleanedRects = frameRects
+          .map((rect, rectIndex) => ({
+            id: String(rect?.id ?? `${frame.id}-${rectIndex}`),
+            x: Number(rect?.x),
+            y: Number(rect?.y),
+            width: Number(rect?.width),
+            height: Number(rect?.height),
+            is_annotation_generated: Boolean(rect?.is_annotation_generated),
+          }))
+          .filter(
+            (rect) =>
+              Number.isFinite(rect.x) &&
+              Number.isFinite(rect.y) &&
+              Number.isFinite(rect.width) &&
+              Number.isFinite(rect.height)
+          );
+
+        const frameCalc = calcification?.[frameIndex];
+        const calcValue = frameCalc?.binary_classification;
+        const isCalcified =
+          calcValue === null || calcValue === undefined
+            ? typeof calcificationStatus === "boolean"
+              ? calcificationStatus
+              : null
+            : Boolean(calcValue);
+        const generatedCalcium =
+          typeof frameCalc?.is_calcification_generated === "boolean"
+            ? frameCalc.is_calcification_generated
+            : null;
+
+        return {
+          frame_id: frame.id,
+          rects: cleanedRects,
+          is_calcified: isCalcified,
+          generated_calcium: generatedCalcium,
+        };
+      });
 
       await api.post(
         `/api/patient/${patient.id}/echocardiogram/${echoId}/submit/`,
@@ -116,8 +149,6 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
           const pdfBlob = await generatePdfBlob(echoData, patient, user, reportText);
           const formData = new FormData();
           formData.append("pdf_file", pdfBlob, `report_${patient.id}.pdf`);
-          formData.append("reportText", reportText);
-
           await createReport(formData, patient.id);
         } catch (err) {
           console.error("Erro ao gerar o relatório:", err);

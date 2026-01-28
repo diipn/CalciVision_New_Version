@@ -120,27 +120,27 @@ const Reports = () => {
                 {/* Echo Data Preview */}
                 {selectedPatientId && (
                     <div className="bg-gray-100 p-4 rounded-lg">
-                        <h2 className="text-lg font-semibold mb-4">Echocardiogram Data</h2>
+                        <h2 className="text-lg font-semibold mb-4">Dados do ecocardiograma</h2>
 
                         {isLoading ? (
-                            <p>Loading data...</p>
+                            <p>A carregar dados...</p>
                         ) : echoData.length > 0 ? (
                             <>
                                 <div className="mb-4 space-y-3">
                                     {echoData.map((item, index) => (
                                         <div key={index} className="bg-white p-8 rounded shadow flex justify-between items-center">
-                                            <p><strong>Frame:</strong> {item.frame || 'N/A'}</p>
+                                            <p><strong>Frame:</strong> {item.frame || 'N/D'}</p>
                                             <p>
-                                                <strong>Position:</strong> X: {item.rects?.x ?? 'N/A'} , Y: {item.rects?.y ?? 'N/A'}
+                                                <strong>Posição:</strong> X: {item.rects?.x ?? 'N/D'} , Y: {item.rects?.y ?? 'N/D'}
                                             </p>
                                             <p>
-                                                <strong>Size:</strong> {item.rects?.width ?? 'N/A'} x {item.rects?.height ?? 'N/A'}
+                                                <strong>Tamanho:</strong> {item.rects?.width ?? 'N/D'} x {item.rects?.height ?? 'N/D'}
                                             </p>
                                             <p>
-                                                <strong>Calcified:</strong> {item.is_calcified ? 'Yes' : 'No'}
+                                                <strong>Calcificada:</strong> {item.is_calcified ? 'Sim' : 'Não'}
                                             </p>
                                             <p>
-                                                <strong>Confidence:</strong> {item.confidence ?? 'N/A'} %
+                                                <strong>Confiança:</strong> {item.confidence ?? 'N/D'} %
                                             </p>
                                         </div>
                                     ))}
@@ -150,7 +150,7 @@ const Reports = () => {
                                     className="bg-green text-white py-2 px-4 rounded"
                                     onClick={async () => {
                                         if (!selectedPatientId) {
-                                            alert("Selecione um paciente!");
+                                            alert("Selecione um doente.");
                                             return;
                                         }
                                         try {
@@ -159,18 +159,18 @@ const Reports = () => {
                                             formData.append("pdf_file", pdfBlob, `report_${selectedPatientId}.pdf`);
 
                                             await createReport(formData, selectedPatientId);
-                                            alert("Report enviado e salvo com sucesso!");
+                                            alert("Relatório enviado e guardado com sucesso.");
                                         } catch (err) {
                                             console.error("Erro completo:", err);
-                                            alert("Erro ao enviar report: " + (err.response?.data?.error || err.message));
+                                            alert("Erro ao enviar relatório: " + (err.response?.data?.error || err.message));
                                         }
                                     }}
                                 >
-                                    Generate Report
+                                    Gerar relatório
                                 </button>
                             </>
                         ) : (
-                            <p>No data available for this patient</p>
+                            <p>Não existem dados disponíveis para este doente.</p>
                         )}
                     </div>
                 )}

@@ -7,13 +7,14 @@ import { useParams } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 import api, { getExamSettings, updateExamSettings } from '../api';
 import { useUnsavedStore } from '../store/useUnsavedStore';
-import { defaultImageSettings } from '../mocks/mockDb';
+import { defaultImageSettings } from '../constants';
 
 export default function ManualAnnotation() {
   const [frames, setFrames] = useState([]);
   const [rects, setRects] = useState([]);
   const [currentFrame, setCurrentFrame] = useState(0);
   const [calcification, setCalcification] = useState([]);
+  const [framesLoading, setFramesLoading] = useState(true);
   // Histórico de previsões. Se a previsão de cálcio para uma área já foi feita, guarda neste array em vez de enviar para o modelo desnecessariamente
   const [predictionHistory, setPredictionHistory] = useState([]);
   // A posição do retângulo dada pelo modelo
@@ -29,15 +30,32 @@ export default function ManualAnnotation() {
   const { setUnsavedChanges } = useUnsavedStore();
 
   useEffect(() => {
-    const fetchFrames = async () => {
+    let isActive = true;
+    let retryTimeout = null;
+    const maxAttempts = 12;
+    const retryDelayMs = 2000;
+
+    const fetchFrames = async (attempt = 0) => {
       try {
         const patientInfoResponse = await api.get(`/api/patient/${patientId}/`);
-        patientInfoResponse.status === 200 && setPatient(patientInfoResponse.data);
+        if (patientInfoResponse.status === 200 && isActive) {
+          setPatient(patientInfoResponse.data);
+        }
 
         const echoFramesResponse = await api.get(
           `/api/patient/${patientId}/echocardiogram/${echoId}/frames/`
         );
         const data = echoFramesResponse.data;
+        if (!isActive) return;
+
+        if (!data?.length) {
+          if (attempt < maxAttempts) {
+            retryTimeout = setTimeout(() => fetchFrames(attempt + 1), retryDelayMs);
+            return;
+          }
+          setFramesLoading(false);
+          return;
+        }
 
         // Atualiza os states principais
         const formattedFrames = data.map((frame) => ({
@@ -112,23 +130,54 @@ export default function ManualAnnotation() {
 
         // Atualiza todos os states ao mesmo tempo
         setFrames(formattedFrames);
-        setRects(formattedRects);
+        const savedProgress = localStorage.getItem(`exam-progress-${echoId}`);
+        if (savedProgress) {
+          try {
+            const parsed = JSON.parse(savedProgress);
+            const savedRects = Array.isArray(parsed?.rects) ? parsed.rects : formattedRects;
+            const savedCalcification = Array.isArray(parsed?.calcification)
+              ? parsed.calcification
+              : formattedCalcification;
+            setRects(savedRects);
+            setCalcification(savedCalcification);
+          } catch {
+            setRects(formattedRects);
+            setCalcification(formattedCalcification);
+          }
+        } else {
+          setRects(formattedRects);
+          setCalcification(formattedCalcification);
+        }
         setPredictedValveBoxes(formattedPredictedValveBoxes);
-        setCalcification(formattedCalcification);
         setPredictionHistory(formattedPredictionHistory);
 
-        formattedCalcification[currentFrame]?.binary_classification !== null &&
-          formattedCalcification[currentFrame]?.binary_classification !== undefined &&
-          setCalcificationStatus(
-            formattedCalcification[currentFrame].binary_classification === 1
-          );
+        const currentCalc =
+          (savedProgress && (() => {
+            try {
+              const parsed = JSON.parse(savedProgress);
+              return parsed?.calcification?.[currentFrame];
+            } catch {
+              return null;
+            }
+          })()) || formattedCalcification[currentFrame];
+        if (currentCalc?.binary_classification !== null && currentCalc?.binary_classification !== undefined) {
+          setCalcificationStatus(currentCalc.binary_classification === 1);
+        }
+        setFramesLoading(false);
       } catch (error) {
+        if (!isActive) return;
+        setFramesLoading(false);
         if (error.response && (error.response.status === 403 || error.response.status === 404)) {
           navigate('/404');
         }
       }
     };
+    setFramesLoading(true);
     fetchFrames();
+    return () => {
+      isActive = false;
+      if (retryTimeout) clearTimeout(retryTimeout);
+    };
   }, [patientId, echoId]);
 
   useEffect(() => {
@@ -156,6 +205,16 @@ export default function ManualAnnotation() {
 
   return (
     <MainLayout pageTitle={`Anotação da Válvula Aórtica — ${patient?.name || 'CalciVision'}`}>
+      {framesLoading && (
+        <div className="mb-4 rounded-lg border border-green-pale bg-green-light/40 px-4 py-3 text-sm text-green-dark">
+          A carregar imagens do ecocardiograma. Isto pode demorar alguns segundos.
+        </div>
+      )}
+      {!framesLoading && frames.length === 0 && (
+        <div className="mb-4 rounded-lg border border-red/30 bg-red/5 px-4 py-3 text-sm text-red">
+          Não foi possível carregar os frames do ecocardiograma. Verifique o DICOM e tente novamente.
+        </div>
+      )}
       <AnalysisWizard
         annotationToolRef={annotationToolRef}
         frames={frames}

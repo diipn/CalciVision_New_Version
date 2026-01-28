@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import api, { useMockApi } from '../api';
+import api from '../api';
 
 export function useValveDetection() {
   const [progress, setProgress] = useState(0);
@@ -8,18 +8,6 @@ export function useValveDetection() {
 
   const startDetection = async (image) => {
     if (!image) return;
-    if (useMockApi) {
-      setIsLoading(true);
-      setProgress(40);
-      return new Promise((resolve) => {
-        setTimeout(() => {
-          setProgress(100);
-          setIsLoading(false);
-          resolve({ bbox: [120, 90, 260, 210] });
-          setProgress(0);
-        }, 600);
-      });
-    }
 
     setIsLoading(true);
     try {

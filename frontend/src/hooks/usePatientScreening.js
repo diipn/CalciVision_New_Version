@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import api, { useMockApi } from "../api";
+import api from "../api";
 import { useBatchProgressStore } from '../store/useBatchProgressStore';
 
 export function usePatientScreening() {
@@ -36,11 +36,6 @@ export function usePatientScreening() {
   };
 
   const connectPatientScreening = async () => {
-    if (useMockApi) {
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
 
     // Atualiza os dados mais recentes dos batches

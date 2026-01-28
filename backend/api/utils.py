@@ -58,6 +58,9 @@ def process_echocardiogram(dicom, patient):
     dicom_path = os.path.join(settings.MEDIA_ROOT, str(echo.dicom_file))
             
     frames = extrair_frames(dicom_path)
+    if not frames:
+        echo.delete()
+        raise ValueError("Nenhum frame extraído do DICOM.")
     
     for frame_array, idx in frames:
         # Converte para JPEG em memória
@@ -71,25 +74,31 @@ def process_echocardiogram(dicom, patient):
             image=img_content,
             frame_index=idx,
         )
+    return echo
     
 
 ##### PROCESSAMENTO DICOM #####
 
 def ler_dicom(dicom_path):
     """Lê um DICOM e extrai a imagem como array numpy"""
-    dicom = pydicom.dcmread(dicom_path)
+    dicom = pydicom.dcmread(dicom_path, force=True)
     
     # Tenta obter a imagem
     if hasattr(dicom, 'pixel_array'):
         img_array = dicom.pixel_array
         
         # Algumas imagens vêm em modo monocromático invertido (negativo)
-        if dicom.PhotometricInterpretation == "MONOCHROME1":
+        if getattr(dicom, "PhotometricInterpretation", "") == "MONOCHROME1":
             img_array = np.max(img_array) - img_array
         
         # Normaliza para 0-255 se for necessário
         if img_array.dtype != np.uint8:
-            img_array = ((img_array - np.min(img_array)) / (np.max(img_array) - np.min(img_array)) * 255).astype(np.uint8)
+            min_val = np.min(img_array)
+            max_val = np.max(img_array)
+            if max_val == min_val:
+                img_array = np.zeros_like(img_array, dtype=np.uint8)
+            else:
+                img_array = ((img_array - min_val) / (max_val - min_val) * 255).astype(np.uint8)
         
         return dicom, img_array
     else:
@@ -101,48 +110,49 @@ def extrair_frames(dicom_path) -> list[tuple[np.ndarray, int]]:
     Extrai e processa os frames do DICOM sem salvá-los no disco.
     Retorna uma lista de tuplos: (frame_em_numpy, índice).
     """
-    try:
-        dicom, img_array = ler_dicom(dicom_path)
-        num_frames = getattr(dicom, "NumberOfFrames", None)
-        output = []
+    dicom, img_array = ler_dicom(dicom_path)
+    num_frames = getattr(dicom, "NumberOfFrames", None)
+    output = []
 
-        if len(img_array.shape) == 3 and num_frames and num_frames > 1:
-            print(f"Extraindo {num_frames} frames de {dicom_path}")
-            for idx in range(num_frames):
-                if img_array.shape[0] == num_frames:
-                    frame = img_array[idx]
-                elif img_array.shape[2] == num_frames:
-                    frame = img_array[:, :, idx]
-                else:
-                    print("Formato de frames inesperado.")
-                    continue
+    if len(img_array.shape) == 3 and num_frames and num_frames > 1:
+        print(f"Extraindo {num_frames} frames de {dicom_path}")
+        for idx in range(num_frames):
+            if img_array.shape[0] == num_frames:
+                frame = img_array[idx]
+            elif img_array.shape[2] == num_frames:
+                frame = img_array[:, :, idx]
+            else:
+                raise ValueError("Formato de frames inesperado.")
 
-                frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2RGB)
-                frame = cortar_margens(frame)
-                frame = padronizar_frame(frame)
-
-                if frame.shape[0] == 0 or frame.shape[1] == 0:
-                    print(f"Frame {idx} está vazio após cortar margens.")
-                    continue
-
-                output.append((frame, idx + 1))
-
-        else:
-            frame = img_array
+            frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2RGB)
             frame = cortar_margens(frame)
             frame = padronizar_frame(frame)
-            output.append((frame, 1))
-        
-        return output
-        
-    except Exception as e:
-        print(f"Erro ao processar DICOM {dicom_path}: {e}")
-        return []
+
+            if frame.shape[0] == 0 or frame.shape[1] == 0:
+                continue
+
+            output.append((frame, idx + 1))
+
+    else:
+        frame = img_array
+        if frame.ndim == 2:
+            frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2RGB)
+        frame = cortar_margens(frame)
+        frame = padronizar_frame(frame)
+        output.append((frame, 1))
+    
+    if not output:
+        raise ValueError("Nenhum frame extraído do DICOM.")
+
+    return output
         
 
 def cortar_margens(img_array: np.ndarray, limiar=5):
     """Corta margens pretas da imagem"""
-    gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+    if img_array.ndim == 2:
+        gray = img_array
+    else:
+        gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
     _, thresh = cv2.threshold(gray, limiar, 255, cv2.THRESH_BINARY)
     coords = cv2.findNonZero(thresh)
     

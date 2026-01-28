@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import api, { useMockApi } from '../api';
+import api from '../api';
 
 export function useCalciumDetection() {
   const [progress, setProgress] = useState(0);
@@ -10,23 +10,6 @@ export function useCalciumDetection() {
    */
   const startDetection = async (image, bbox) => {
     if (!image) return;
-    if (useMockApi) {
-      setIsLoading(true);
-      setProgress(45);
-      return new Promise((resolve) => {
-        setTimeout(() => {
-          const binary = Math.random() > 0.5;
-          setProgress(100);
-          setIsLoading(false);
-          resolve({
-            binary_classification: binary,
-            confidence: binary ? 0.82 : 0.18,
-            is_calcification_generated: true,
-          });
-          setProgress(0);
-        }, 650);
-      });
-    }
 
     setIsLoading(true);
     try {

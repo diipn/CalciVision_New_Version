@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import api, { useMockApi } from '../api';
+import api from '../api';
 
 export function useBatchValveDetection() {
   const [isLoading, setIsLoading] = useState(false);
@@ -22,25 +22,6 @@ export function useBatchValveDetection() {
     if (!images || images.length == 0) return;
     setIsLoading(true);
     setProgress({});
-
-    if (useMockApi) {
-      const result = {};
-      images.forEach((image, idx) => {
-        result[image.name] = {
-          status: 'SUCCESS',
-          progress: 100,
-          phase: 'Mock results ready',
-          results: {
-            bbox: [90 + idx * 5, 75 + idx * 4, 240 + idx * 5, 200 + idx * 4],
-            binary_classification: idx % 2 === 0,
-            confidence: 0.76,
-          },
-        };
-      });
-      setAndTrackProgress(result);
-      setIsLoading(false);
-      return result;
-    }
 
     try {
       const formData = new FormData();

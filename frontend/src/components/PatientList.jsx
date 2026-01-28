@@ -26,7 +26,6 @@ export default function PatientList({ patients, defaultPatient, reloadTable }) {
             <th className='w-1/20' />
             <th className='w-1/6 px-4 py-2 text-left'>Doente</th>
             <th className='w-1/9 px-4 py-2 text-left'>Atualizado</th>
-            <th className='w-1/8 px-4 py-2 text-left'>Estado</th>
             <th className='w-1/6 px-4 py-2 text-left'>Morada</th>
             <th className='w-1/5 px-4 py-2 text-left'>Email</th>
             <th className='1/6 px-4 py-2 text-left'>Exames</th>
@@ -109,11 +108,6 @@ function PatientRow({ patient, defaultState, reloadTable }) {
         </td>
         <td className='px-4 py-3 text-left min-w-8 truncate'>{patient.name}</td>
         <td className='px-4 py-3 text-left min-w-8 truncate'>{new Date(patient.updated_at).toLocaleString('pt-PT', { day: '2-digit', month: '2-digit', year: 'numeric' })}</td>
-        <td className='px-4 py-3 text-left min-w-8 truncate'>
-          <div className={`w-full py-1 text-white text-center text-sm rounded-md ${patient.status === 'EVALUATED' ? 'bg-green-600' : patient.status === 'UNDER_REVIEW' ? 'bg-amber-600' : 'bg-red'}`}>
-            {formatStatus(patient.status)}
-          </div>
-        </td>
         <td className='px-4 py-3 text-left min-w-8 truncate'>{patient.address}</td>
         <td className='px-4 py-3 text-left min-w-8 truncate'>{patient.email}</td>
         <td className='px-4 py-3 text-left min-w-8 truncate'>{patient.echocardiograms.length}</td>
@@ -279,15 +273,6 @@ function EchocardiogramsTable({ patient, reloadTable }) {
     </div>
   );
 }
-
-const formatStatus = (text) => {
-  return text
-    .replace('_', ' ')
-    .toLowerCase()
-    .split(' ')
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
-};
 
 const getRiskBadge = (vo) => {
   if (vo === undefined || vo === null) return null;

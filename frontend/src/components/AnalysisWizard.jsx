@@ -72,6 +72,7 @@ export default function AnalysisWizard({
   const [classificationTouched, setClassificationTouched] = useState(false);
   const [notesDirty, setNotesDirty] = useState(false);
   const [toasts, setToasts] = useState([]);
+  const [reportCreated, setReportCreated] = useState(false);
 
   const annotationRevision = useRef(0);
   const confirmedAnnotationRevision = useRef(0);
@@ -79,6 +80,7 @@ export default function AnalysisWizard({
   const confirmedAssessmentRevision = useRef(0);
   const settingsLoaded = useRef(false);
   const isHydrating = useRef(true);
+  const progressHydrated = useRef(false);
 
   const voBase = useMemo(() => normalizeVo(exam?.vo), [exam?.vo]);
   const voEffective = voOverrideEnabled ? voOverrideValue : voBase;
@@ -98,6 +100,13 @@ export default function AnalysisWizard({
     setTimeout(() => {
       setToasts((prev) => prev.filter((toast) => toast.id !== id));
     }, 4000);
+  };
+
+  const isDev = import.meta.env.DEV;
+  const logDebug = (label, data) => {
+    if (isDev) {
+      console.log(`[AnalysisWizard] ${label}`, data);
+    }
   };
 
   useEffect(() => {
@@ -125,6 +134,56 @@ export default function AnalysisWizard({
     };
     hydrateSettings();
   }, [echoId]);
+
+  useEffect(() => {
+    setReportCreated(false);
+  }, [echoId]);
+
+  useEffect(() => {
+    if (!echoId) return;
+    const saved = localStorage.getItem(`exam-progress-${echoId}`);
+    if (!saved) return;
+    try {
+      const parsed = JSON.parse(saved);
+      if (parsed?.step) {
+        setCurrentStep(parsed.step);
+      }
+      if (parsed?.reportText) {
+        setReportText(parsed.reportText);
+      }
+      if (parsed?.step || parsed?.reportText) {
+        setCompletedSteps({
+          1: parsed?.step >= 2,
+          2: parsed?.step >= 3,
+          3: Boolean(parsed?.reportText),
+        });
+        progressHydrated.current = true;
+      }
+    } catch (error) {
+      console.warn("Não foi possível carregar o progresso guardado.", error);
+    }
+  }, [echoId]);
+
+  useEffect(() => {
+    if (!progressHydrated.current) return;
+    setCompletedSteps((prev) => ({
+      ...prev,
+      2: isValidated || prev[2],
+      3: reportText ? true : prev[3],
+    }));
+  }, [isValidated, reportText]);
+
+  useEffect(() => {
+    if (!echoId) return;
+    const payload = {
+      step: currentStep,
+      rects,
+      calcification,
+      reportText,
+      updatedAt: new Date().toISOString(),
+    };
+    localStorage.setItem(`exam-progress-${echoId}`, JSON.stringify(payload));
+  }, [echoId, currentStep, rects, calcification, reportText]);
 
   useEffect(() => {
     if (voBase !== null && !voOverrideEnabled) {
@@ -238,7 +297,17 @@ export default function AnalysisWizard({
     setReportText(template);
     setUnsavedChanges(true);
     await updateExamSettings(echoId, { reportText: template });
-    await createReport({ reportText: template, examId: echoId }, patient.id, echoId);
+    try {
+      const pdfBlob = await generatePdfBlob();
+      const formData = new FormData();
+      formData.append("pdf_file", pdfBlob, `report_${patient.id}.pdf`);
+      await createReport(formData, patient.id);
+      setReportCreated(true);
+      addToast("Relatório gerado com sucesso.", "success");
+    } catch (error) {
+      console.error("Erro ao gerar o relatório:", error);
+      addToast("Não foi possível gerar o relatório. Verifique os dados e tente novamente.", "error");
+    }
   };
 
   const handleNotesChange = async (value) => {
@@ -274,12 +343,45 @@ export default function AnalysisWizard({
   const handleUpdateEcho = async (completed) => {
     try {
       if (!patient) return;
-      const results = frames.map((frame, frameIndex) => ({
-        frame_id: frame.id,
-        rects: [...rects[frameIndex]],
-        is_calcified: calcificationStatus,
-        generated_calcium: calcification[frameIndex]?.is_calcification_generated,
-      }));
+      const results = frames.map((frame, frameIndex) => {
+        const frameRects = Array.isArray(rects?.[frameIndex]) ? rects[frameIndex] : [];
+        const cleanedRects = frameRects
+          .map((rect, rectIndex) => ({
+            id: String(rect?.id ?? `${frame.id}-${rectIndex}`),
+            x: Number(rect?.x),
+            y: Number(rect?.y),
+            width: Number(rect?.width),
+            height: Number(rect?.height),
+            is_annotation_generated: Boolean(rect?.is_annotation_generated),
+          }))
+          .filter(
+            (rect) =>
+              Number.isFinite(rect.x) &&
+              Number.isFinite(rect.y) &&
+              Number.isFinite(rect.width) &&
+              Number.isFinite(rect.height)
+          );
+
+        const frameCalc = calcification?.[frameIndex];
+        const calcValue = frameCalc?.binary_classification;
+        const isCalcified =
+          calcValue === null || calcValue === undefined
+            ? typeof calcificationStatus === "boolean"
+              ? calcificationStatus
+              : null
+            : Boolean(calcValue);
+        const generatedCalcium =
+          typeof frameCalc?.is_calcification_generated === "boolean"
+            ? frameCalc.is_calcification_generated
+            : null;
+
+        return {
+          frame_id: frame.id,
+          rects: cleanedRects,
+          is_calcified: isCalcified,
+          generated_calcium: generatedCalcium,
+        };
+      });
 
       await updateExamSettings(echoId, {
         classificationOverride: classificationChoice,
@@ -292,11 +394,20 @@ export default function AnalysisWizard({
 
       await createReportIfNeeded(completed);
 
-      await api.post(`/api/patient/${patient.id}/echocardiogram/${echoId}/submit/`, {
+      const payload = {
         results,
         completed,
-        echoName: exam?.description || "",
-      });
+      };
+      const echoName = exam?.description?.trim();
+      if (echoName) {
+        payload.echoName = echoName;
+      }
+
+      const endpoint = `/api/patient/${patient.id}/echocardiogram/${echoId}/submit/`;
+      logDebug("Endpoint de submissão", endpoint);
+      logDebug("Payload de submissão", payload);
+
+      await api.post(endpoint, payload);
 
       setUnsavedChanges(false);
       setNotesDirty(false);
@@ -305,20 +416,20 @@ export default function AnalysisWizard({
         navigate(`/patients?patient=${patient.id}`);
       }
     } catch (error) {
+      logDebug("Erro na submissão", error?.response?.data || error);
       console.error("Erro na submissão dos resultados", error);
       addToast("Erro ao guardar os resultados.", "error");
     }
   };
 
   const createReportIfNeeded = async (completed) => {
-    if (!completed || !reportText) return;
+    if (!completed || !reportText || reportCreated) return;
     try {
       const pdfBlob = await generatePdfBlob();
       const formData = new FormData();
       formData.append("pdf_file", pdfBlob, `report_${patient.id}.pdf`);
-      formData.append("reportText", reportText);
-      formData.append("examId", echoId);
-      await createReport(formData, patient.id, echoId);
+      await createReport(formData, patient.id);
+      setReportCreated(true);
     } catch (err) {
       console.error("Erro ao gerar o relatório:", err);
     }
@@ -401,14 +512,19 @@ export default function AnalysisWizard({
                   setManualActionActive(false);
                 }}
                 onDetectIA={async () => {
-                  const result = await annotationToolRef.current?.detetarValvulaIA();
-                  if (result) {
-                    setAnnotationStatusMessage("Válvula identificada.");
-                    addToast("Válvula identificada.", "success");
-                    setAiActionActive(true);
-                    setManualActionActive(false);
-                  } else {
-                    addToast("Não foi possível detetar a válvula.", "error");
+                  try {
+                    const result = await annotationToolRef.current?.detetarValvulaIA();
+                    if (result) {
+                      setAnnotationStatusMessage("Válvula identificada.");
+                      addToast("Válvula identificada.", "success");
+                      setAiActionActive(true);
+                      setManualActionActive(false);
+                    } else {
+                      addToast("Não foi possível detetar a válvula.", "error");
+                    }
+                  } catch (error) {
+                    logDebug("Erro na deteção IA", error?.response?.data || error);
+                    addToast("Erro ao detetar a válvula.", "error");
                   }
                 }}
                 onResetIA={() => {

@@ -17,27 +17,18 @@ const VO_THRESHOLD = 30;
 const steps = [
   {
     id: 1,
-    title: "Selecionar modo e preparar imagem",
-    objective: "Defina o modo de anotação e ajuste a imagem.",
-    cta: "Confirmar preparação da imagem",
+    title: "Anotar válvula",
+    objective: "Delimite a válvula e confirme a anotação.",
   },
   {
     id: 2,
-    title: "Anotar/Confirmar válvula",
-    objective: "Delimite a válvula e confirme a anotação.",
-    cta: "Confirmar anotação",
+    title: "Avaliar calcificação",
+    objective: "Revise a VO, selecione a classificação e valide.",
   },
   {
     id: 3,
-    title: "Avaliar calcificação",
-    objective: "Revise a VO, selecione a classificação e valide.",
-    cta: "Validar avaliação clínica",
-  },
-  {
-    id: 4,
     title: "Relatório clínico",
-    objective: "Gere, edite e submeta o relatório.",
-    cta: "Submeter",
+    objective: "Gere o relatório e finalize o processo.",
   },
 ];
 
@@ -75,7 +66,11 @@ export default function AnalysisWizard({
   const [voOverrideEnabled, setVoOverrideEnabled] = useState(false);
   const [voOverrideValue, setVoOverrideValue] = useState(0);
   const [annotationStatusMessage, setAnnotationStatusMessage] = useState("");
-  const [manualAdjustmentTriggered, setManualAdjustmentTriggered] = useState(false);
+  const [manualActionActive, setManualActionActive] = useState(false);
+  const [aiActionActive, setAiActionActive] = useState(false);
+  const [autoEnhanceEnabled, setAutoEnhanceEnabled] = useState(false);
+  const [classificationTouched, setClassificationTouched] = useState(false);
+  const [notesDirty, setNotesDirty] = useState(false);
   const [toasts, setToasts] = useState([]);
 
   const annotationRevision = useRef(0);
@@ -95,12 +90,7 @@ export default function AnalysisWizard({
       : null;
 
   const isAnnotationReady = rects.some((frameRects) => frameRects?.length > 0);
-  const hasPrediction = rects.some((frameRects) =>
-    frameRects?.some((rect) => rect?.is_annotation_generated)
-  );
-
-  const canSubmit =
-    completedSteps[1] && completedSteps[2] && completedSteps[3] && isValidated;
+  const canSubmit = completedSteps[1] && completedSteps[2] && isValidated;
 
   const addToast = (message, type = "info") => {
     const id = `${Date.now()}-${Math.random()}`;
@@ -120,6 +110,9 @@ export default function AnalysisWizard({
             ? settings.classificationOverride
             : null
         );
+        if (settings.classificationOverride !== undefined) {
+          setClassificationTouched(true);
+        }
         setIsValidated(Boolean(settings.validated));
         setReportText(settings.reportText || "");
         setClinicalNotes(settings.clinicalNotes || "");
@@ -147,18 +140,17 @@ export default function AnalysisWizard({
 
   const handleAnnotationChanged = () => {
     annotationRevision.current += 1;
-    if (currentStep === 2) {
-      if (manualAdjustmentTriggered && mode === "ia") {
-        setAnnotationStatusMessage("Anotação ajustada manualmente.");
-        setManualAdjustmentTriggered(false);
-      }
-      if (mode === "manual" && !annotationStatusMessage) {
-        setAnnotationStatusMessage("Anotação manual concluída.");
-      }
+    if (currentStep === 1 && mode === "manual") {
+      setAnnotationStatusMessage("Anotação manual concluída.");
+    }
+    if (mode === "manual") {
+      setManualActionActive(false);
     }
     if (completedSteps[2] || completedSteps[3]) {
-      setCompletedSteps((prev) => ({ ...prev, 2: false, 3: false, 4: false }));
+      setCompletedSteps((prev) => ({ ...prev, 2: false, 3: false }));
       if (currentStep > 2) setCurrentStep(2);
+      setClassificationChoice(null);
+      setClassificationTouched(false);
       addToast("Alteração detetada. É necessário rever a avaliação clínica.", "warning");
     }
   };
@@ -173,23 +165,26 @@ export default function AnalysisWizard({
     assessmentRevision.current += 1;
     if (assessmentRevision.current > confirmedAssessmentRevision.current) {
       setIsValidated(false);
-      setCompletedSteps((prev) => ({ ...prev, 3: false, 4: false }));
+      setCompletedSteps((prev) => ({ ...prev, 2: false, 3: false }));
       updateExamSettings(echoId, { validated: false });
       addToast("Alteração detetada. Revalide a avaliação clínica.", "warning");
     }
   }, [classificationChoice, voOverrideEnabled, voOverrideValue]);
 
-  const handleConfirmStep = (stepId) => {
-    setCompletedSteps((prev) => ({ ...prev, [stepId]: true }));
-    setCurrentStep((prev) => Math.min(prev + 1, steps.length));
-  };
+  useEffect(() => {
+    if (!classificationTouched && voSuggestion) {
+      setClassificationChoice(voSuggestion === "Calcificada");
+    }
+  }, [voSuggestion, classificationTouched]);
 
   const handleModeChange = (nextMode) => {
     if (mode === nextMode) return;
     setMode(nextMode);
     setAnnotationStatusMessage("");
     setUnsavedChanges(true);
-    setCompletedSteps((prev) => ({ ...prev, 2: false, 3: false, 4: false }));
+    setManualActionActive(false);
+    setAiActionActive(false);
+    setCompletedSteps((prev) => ({ ...prev, 2: false, 3: false }));
     setCurrentStep(1);
     addToast("Modo alterado. Reveja a anotação da válvula.", "info");
   };
@@ -200,7 +195,8 @@ export default function AnalysisWizard({
       return;
     }
     confirmedAnnotationRevision.current = annotationRevision.current;
-    handleConfirmStep(2);
+    setCompletedSteps((prev) => ({ ...prev, 1: true }));
+    setCurrentStep(2);
     addToast("Anotação confirmada.", "success");
   };
 
@@ -217,8 +213,8 @@ export default function AnalysisWizard({
     });
     confirmedAssessmentRevision.current = assessmentRevision.current;
     setIsValidated(true);
-    setCompletedSteps((prev) => ({ ...prev, 3: true }));
-    setCurrentStep(4);
+    setCompletedSteps((prev) => ({ ...prev, 2: true }));
+    setCurrentStep(3);
     addToast("Avaliação clínica validada.", "success");
   };
 
@@ -244,18 +240,10 @@ export default function AnalysisWizard({
     await updateExamSettings(echoId, { reportText: template });
   };
 
-  const handleReportChange = async (value) => {
-    setReportText(value);
-    setUnsavedChanges(true);
-    await updateExamSettings(echoId, {
-      reportText: value,
-      reportUpdatedAt: new Date().toISOString(),
-    });
-  };
-
   const handleNotesChange = async (value) => {
     setClinicalNotes(value);
     setUnsavedChanges(true);
+    setNotesDirty(true);
     await updateExamSettings(echoId, { clinicalNotes: value });
   };
 
@@ -310,6 +298,7 @@ export default function AnalysisWizard({
       });
 
       setUnsavedChanges(false);
+      setNotesDirty(false);
       addToast(completed ? "Resultados submetidos com sucesso." : "Rascunho guardado.", "success");
       if (completed) {
         navigate(`/patients?patient=${patient.id}`);
@@ -389,59 +378,84 @@ export default function AnalysisWizard({
         <aside className="rounded-lg border border-green-pale bg-white p-5 shadow-sm">
           {currentStep === 1 && (
             <div className="space-y-4">
-              <div>
-                <h3 className="text-base font-semibold text-green-dark">Selecionar modo</h3>
-                <p className="text-sm text-gray-600">{steps[0].objective}</p>
-              </div>
               <ModeSelector
                 mode={mode}
                 onChange={handleModeChange}
                 disabled={currentStep !== 1}
+                showDescription={false}
               />
+              <ValveAnnotationStep
+                mode={mode}
+                isManualActive={manualActionActive}
+                isAiActive={aiActionActive}
+                onManualDefine={() => {
+                  annotationToolRef.current?.iniciarAnotacaoManual();
+                  setManualActionActive(true);
+                  setAiActionActive(false);
+                  setAnnotationStatusMessage("Modo de desenho ativo.");
+                }}
+                onClearManual={() => {
+                  annotationToolRef.current?.limparAnotacoes();
+                  setManualActionActive(false);
+                }}
+                onDetectIA={async () => {
+                  const result = await annotationToolRef.current?.detetarValvulaIA();
+                  if (result) {
+                    setAnnotationStatusMessage("Válvula identificada.");
+                    addToast("Válvula identificada.", "success");
+                    setAiActionActive(true);
+                    setManualActionActive(false);
+                  } else {
+                    addToast("Não foi possível detetar a válvula.", "error");
+                  }
+                }}
+                onResetIA={() => {
+                  annotationToolRef.current?.limparAnotacoes();
+                  setAiActionActive(false);
+                }}
+              />
+              {annotationStatusMessage && (
+                <div className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-900">
+                  {annotationStatusMessage}
+                </div>
+              )}
               <ImageToolsPanel
                 imageSettings={imageSettings}
-                onChange={onImageSettingsChange}
-                onReset={() => onImageSettingsChange(defaultImageSettings)}
+                onChange={(nextSettings) => {
+                  setAutoEnhanceEnabled(false);
+                  onImageSettingsChange(nextSettings);
+                }}
+                onReset={() => {
+                  setAutoEnhanceEnabled(false);
+                  onImageSettingsChange(defaultImageSettings);
+                }}
+                autoEnhanceEnabled={autoEnhanceEnabled}
+                onAutoEnhanceToggle={(enabled) => {
+                  setAutoEnhanceEnabled(enabled);
+                  if (enabled) {
+                    onImageSettingsChange({
+                      ...imageSettings,
+                      brightness: 1.1,
+                      contrast: 1.2,
+                      blur: 0.6,
+                      zoom: imageSettings?.zoom ?? 1,
+                    });
+                  } else {
+                    onImageSettingsChange(defaultImageSettings);
+                  }
+                }}
               />
               <button
                 type="button"
                 className="w-full rounded-md bg-green-dark px-4 py-2 text-sm font-semibold text-white"
-                onClick={() => handleConfirmStep(1)}
+                onClick={handleConfirmAnnotation}
               >
-                Confirmar preparação da imagem
+                Confirmar anotação
               </button>
             </div>
           )}
 
           {currentStep === 2 && (
-            <ValveAnnotationStep
-              mode={mode}
-              isAnnotationReady={isAnnotationReady}
-              hasPrediction={hasPrediction}
-              onManualStart={() => annotationToolRef.current?.iniciarAnotacaoManual()}
-              onManualCancel={() => annotationToolRef.current?.cancelarAnotacaoManual()}
-              onDetectIA={async () => {
-                const result = await annotationToolRef.current?.detetarValvulaIA();
-                if (result) {
-                  setAnnotationStatusMessage("Válvula identificada.");
-                  addToast("Válvula identificada.", "success");
-                } else {
-                  addToast("Não foi possível detetar a válvula.", "error");
-                }
-              }}
-              onAdjustManual={() => {
-                annotationToolRef.current?.ajustarManual();
-                setAnnotationStatusMessage("Ajuste manual ativo.");
-                setManualAdjustmentTriggered(true);
-              }}
-              onResetIA={() => annotationToolRef.current?.reporAnotacaoIA()}
-              onClear={() => annotationToolRef.current?.limparAnotacoes()}
-              onConfirm={handleConfirmAnnotation}
-              statusMessage={annotationStatusMessage}
-            />
-          )}
-
-          {currentStep === 3 && (
             <CalcificationAssessmentStep
               voValue={voEffective !== null ? voEffective : null}
               voSuggestion={voSuggestion}
@@ -465,6 +479,7 @@ export default function AnalysisWizard({
               classificationChoice={classificationChoice}
               onClassificationChange={(value) => {
                 setClassificationChoice(value);
+                setClassificationTouched(true);
                 setUnsavedChanges(true);
               }}
               isValidated={isValidated}
@@ -474,19 +489,18 @@ export default function AnalysisWizard({
             />
           )}
 
-          {currentStep === 4 && (
+          {currentStep === 3 && (
             <ClinicalReportStep
-              reportText={reportText}
               notes={clinicalNotes}
               onGenerate={handleGenerateReport}
-              onReportChange={handleReportChange}
               onNotesChange={handleNotesChange}
               onSaveDraft={() => handleUpdateEcho(false)}
               onExport={handleExportPdf}
               onSubmit={() => handleUpdateEcho(true)}
               canGenerate={isValidated}
               canSubmit={canSubmit}
-              readyToSubmit={canSubmit}
+              notesDirty={notesDirty}
+              reportReady={Boolean(reportText)}
             />
           )}
         </aside>

@@ -13,7 +13,7 @@ const modeOptions = [
   },
 ];
 
-export default function ModeSelector({ mode, onChange, disabled }) {
+export default function ModeSelector({ mode, onChange, disabled, showDescription = true }) {
   return (
     <div className="space-y-3">
       <div className="flex rounded-lg border border-green-pale bg-white p-1">
@@ -33,9 +33,11 @@ export default function ModeSelector({ mode, onChange, disabled }) {
           </button>
         ))}
       </div>
-      <p className="text-sm text-gray-600">
-        {modeOptions.find((option) => option.value === mode)?.description}
-      </p>
+      {showDescription && (
+        <p className="text-sm text-gray-600">
+          {modeOptions.find((option) => option.value === mode)?.description}
+        </p>
+      )}
     </div>
   );
 }

@@ -34,9 +34,23 @@ export default function CalcificationAssessmentStep({
               type="button"
               className="text-green-dark"
               aria-label="Informação sobre a VO"
-              onClick={() => setShowInfo(true)}
+              onClick={() => setShowInfo((prev) => !prev)}
             >
-              ℹ️
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="16" x2="12" y2="12" />
+                <line x1="12" y1="8" x2="12.01" y2="8" />
+              </svg>
             </button>
           </div>
           {showManualBadge && (
@@ -134,22 +148,9 @@ export default function CalcificationAssessmentStep({
       )}
 
       {showInfo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-          <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-lg">
-            <h4 className="text-base font-semibold text-gray-900">Sobre a Variável Objectiva (VO)</h4>
-            <p className="mt-3 text-sm text-gray-600">
-              A VO é um indicador (0–100) calculado a partir da análise da imagem. Não substitui o julgamento clínico; serve de apoio à decisão e comparação longitudinal.
-            </p>
-            <div className="mt-4 flex justify-end">
-              <button
-                type="button"
-                className="rounded-md bg-green-dark px-4 py-2 text-sm font-semibold text-white"
-                onClick={() => setShowInfo(false)}
-              >
-                Fechar
-              </button>
-            </div>
-          </div>
+        <div className="rounded-md border border-green-pale bg-green-50 p-3 text-sm text-green-900">
+          A VO é um indicador de 0 a 100 calculado a partir da imagem. É um apoio à decisão e não
+          substitui a validação clínica.
         </div>
       )}
     </div>

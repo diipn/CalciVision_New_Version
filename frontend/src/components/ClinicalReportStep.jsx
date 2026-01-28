@@ -1,47 +1,32 @@
 import React from "react";
-import UnsavedChangesIndicator from "./UnsavedChangesIndicator";
 
 export default function ClinicalReportStep({
-  reportText,
   notes,
   onGenerate,
-  onReportChange,
   onNotesChange,
   onSaveDraft,
   onExport,
   onSubmit,
   canGenerate,
   canSubmit,
-  readyToSubmit,
+  notesDirty,
+  reportReady,
 }) {
   return (
     <div className="space-y-4">
-      <div>
-        <h3 className="text-base font-semibold text-green-dark">Relatório clínico</h3>
-        <p className="text-sm text-gray-600">
-          Gere o relatório, adicione observações clínicas e finalize a submissão.
+      <div className="rounded-lg border border-green-pale bg-white p-4 text-center">
+        <h3 className="text-base font-semibold text-green-dark">Gerar relatório</h3>
+        <p className="mt-1 text-sm text-gray-600">
+          Gere automaticamente o relatório clínico a partir da análise.
         </p>
-      </div>
-
-      <div className="rounded-lg border border-green-pale bg-white p-4">
-        <div className="flex items-center justify-between">
-          <h4 className="text-sm font-semibold text-gray-800">Template do relatório</h4>
-          <button
-            type="button"
-            className="text-sm font-semibold text-green-dark underline disabled:opacity-50"
-            onClick={onGenerate}
-            disabled={!canGenerate}
-          >
-            Gerar relatório
-          </button>
-        </div>
-        <textarea
-          className="mt-3 min-h-[160px] w-full rounded-md border border-green-pale bg-white p-3 text-sm"
-          value={reportText}
-          onChange={(event) => onReportChange(event.target.value)}
-          placeholder="Clique em 'Gerar relatório' para preencher o template."
+        <button
+          type="button"
+          className="mt-3 w-full rounded-md bg-green-dark px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          onClick={onGenerate}
           disabled={!canGenerate}
-        />
+        >
+          Gerar relatório
+        </button>
       </div>
 
       <div className="rounded-lg border border-green-pale bg-white p-4">
@@ -69,31 +54,31 @@ export default function ClinicalReportStep({
           >
             Guardar rascunho
           </button>
-          <UnsavedChangesIndicator />
+          {notesDirty && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-xs font-semibold text-orange-800">
+              <span className="h-2 w-2 rounded-full bg-orange-400" aria-hidden="true" />
+              Alterações por guardar
+            </span>
+          )}
         </div>
-        <div className="flex flex-wrap gap-3">
+        <div className="space-y-3">
           <button
             type="button"
-            className="rounded-md border border-green-pale px-4 py-2 text-sm font-semibold text-green-dark disabled:opacity-50"
+            className="w-full rounded-md border border-green-pale px-4 py-2 text-sm font-semibold text-green-dark disabled:opacity-50"
             onClick={onExport}
-            disabled={!reportText}
+            disabled={!reportReady}
           >
             Exportar PDF
           </button>
           <button
             type="button"
-            className="rounded-md bg-green-dark px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            className="w-full rounded-md bg-green-dark px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
             onClick={onSubmit}
             disabled={!canSubmit}
           >
             Submeter
           </button>
         </div>
-        {readyToSubmit && (
-          <div className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-900">
-            Pronto para submeter.
-          </div>
-        )}
       </div>
     </div>
   );

@@ -238,6 +238,7 @@ export default function AnalysisWizard({
     setReportText(template);
     setUnsavedChanges(true);
     await updateExamSettings(echoId, { reportText: template });
+    await createReport({ reportText: template, examId: echoId }, patient.id, echoId);
   };
 
   const handleNotesChange = async (value) => {
@@ -316,7 +317,8 @@ export default function AnalysisWizard({
       const formData = new FormData();
       formData.append("pdf_file", pdfBlob, `report_${patient.id}.pdf`);
       formData.append("reportText", reportText);
-      await createReport(formData, patient.id);
+      formData.append("examId", echoId);
+      await createReport(formData, patient.id, echoId);
     } catch (err) {
       console.error("Erro ao gerar o relatório:", err);
     }

@@ -25,7 +25,7 @@ const RecentPatients = () => {
     return (
         <div>
             <div className='flex items-center justify-between'>
-                <h4>Recent Patients</h4>
+                <h4>Doentes recentes</h4>
                 <button
                     className="ml-6 px-2 cursor-pointer"
                     onClick={() => navigate('/patients')}
@@ -36,6 +36,12 @@ const RecentPatients = () => {
             <ul>
                 {patients.map((patient) => {
                     const gender = patient.gender || patient.sex;
+                    const statusLabel =
+                        patient.status === 'EVALUATED'
+                            ? 'Avaliado'
+                            : patient.status === 'UNDER_REVIEW'
+                            ? 'Em revisão'
+                            : 'Pendente';
                     return (
                     <li 
                         key={patient.id} 
@@ -52,7 +58,7 @@ const RecentPatients = () => {
                             <h5 className='text-lg font-semibold'>{patient.name}</h5>
                             <div className='flex items-center gap-1 text-sm text-gray-medium-dark'>
                                 <svg xmlns="http://www.w3.org/2000/svg" width={16} height={16} viewBox="0 0 24 24"><path fill="currentColor" fillRule="evenodd" d="M14.25 2.5a.25.25 0 0 0-.25-.25H7A2.75 2.75 0 0 0 4.25 5v14A2.75 2.75 0 0 0 7 21.75h10A2.75 2.75 0 0 0 19.75 19V9.147a.25.25 0 0 0-.25-.25H15a.75.75 0 0 1-.75-.75zm.75 9.75a.75.75 0 0 1 0 1.5H9a.75.75 0 0 1 0-1.5zm0 4a.75.75 0 0 1 0 1.5H9a.75.75 0 0 1 0-1.5z" clipRule="evenodd"></path><path fill="currentColor" d="M15.75 2.824c0-.184.193-.301.336-.186q.182.147.323.342l3.013 4.197c.068.096-.006.22-.124.22H16a.25.25 0 0 1-.25-.25z"></path></svg>
-                                <span className='mr-3'>{patient.status.charAt(0) + patient.status.slice(1).toLowerCase()}</span>
+                                <span className='mr-3'>{statusLabel}</span>
                                 <svg xmlns="http://www.w3.org/2000/svg" width={16} height={16} viewBox="0 0 24 24"><path fill="currentColor" d="M19 19H5V8h14m-3-7v2H8V1H6v2H5c-1.11 0-2 .89-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-1V1m-1 11h-5v5h5z"></path></svg>
                                 <span>{new Date(patient.updated_at).toLocaleString('pt-PT', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
                             </div>

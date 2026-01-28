@@ -109,11 +109,11 @@ export const createPatient = async (patientData) => {
   }
 };
 
-export const createReport = async (formData, patientId) => {
+export const createReport = async (formData, patientId, examId) => {
   try {
     if (useMocks) {
       const reportText = formData instanceof FormData ? formData.get("reportText") : formData?.reportText;
-      return mockDb.createReport({ patientId, reportText: reportText || "" });
+      return mockDb.createReport({ patientId, examId, reportText: reportText || "" });
     }
     let config = {};
     if (formData instanceof FormData) {
@@ -125,6 +125,21 @@ export const createReport = async (formData, patientId) => {
     console.error("Error creating report:", error);
     throw error;
   }
+};
+
+export const createExamWithFrames = async (patientId, description, frames) => {
+  if (useMocks) {
+    return mockDb.addExamWithFrames(patientId, description, frames);
+  }
+  const formData = new FormData();
+  formData.append("description", description);
+  frames.forEach((frame) => {
+    formData.append("frames", frame);
+  });
+  const response = await api.post(`/api/patient/${patientId}/echocardiogram/add/`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return response.data;
 };
 
 export const getPatientExams = async (patientId) => {

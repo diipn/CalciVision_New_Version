@@ -14,7 +14,6 @@ const PatientRegister = ({ onClose }) => {
     health_plan: false,
   });
 
-  const [dicomFile, setDicomFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -25,12 +24,6 @@ const PatientRegister = ({ onClose }) => {
       ...form,
       [name]: type === "checkbox" ? checked : value,
     });
-  };
-  const handleFileChange = (e) => {
-    setDicomFile(e.target.files[0]);
-    if (e.target.files[0]) {
-      setError(""); // Limpar erros quando um arquivo for selecionado
-    }
   };
 
   const handleSubmit = async (e) => {
@@ -47,10 +40,7 @@ const PatientRegister = ({ onClose }) => {
           formData.append(key, value);
         }
       });
-      if (dicomFile) {
-        formData.append("echoDicom", dicomFile);
-      }
-      await createPatient(formData, true); // true indica multipart/form-data
+      await createPatient(formData, true);
       setSuccess(true);
       setForm({
         name: "",
@@ -63,16 +53,15 @@ const PatientRegister = ({ onClose }) => {
         occupation: "",
         health_plan: false,
       });
-      setDicomFile(null);
     } catch (err) {
-      setError("Erro ao registrar paciente. Verifique os dados.");
+      setError("Erro ao registar o doente. Verifique os dados.");
     } finally {
       setLoading(false);
     }
   };
 
   const handleClose = () => {
-    onClose(); // Chama a função de fechar passada pelo componente pai
+    onClose();
   };
 
   return (
@@ -82,27 +71,27 @@ const PatientRegister = ({ onClose }) => {
         onSubmit={handleSubmit}
         className="fixed top-1/2 left-1/2 -translate-1/2 w-4/5 max-w-220 bg-gray-50 pl-10 m-5 p-10"
       >
-        <h2 className="text-center font-bold mb-6">Add New Patient</h2>
+        <h2 className="text-center font-bold mb-6">Adicionar doente</h2>
         <div className="flex justify-center">
           <div className="items-center inline-block w-300 border-t-[3px] border-green-dark" />
         </div>
 
         <div className="relative">
           <input
-            className="bg-gray-soft p-1 my-3 mt-8 rounded-md border w-full focus:outline-none pl-10 placeholder-black" // Adicione padding-left (pl-10)
+            className="bg-gray-soft p-1 my-3 mt-8 rounded-md border w-full focus:outline-none pl-10 placeholder-black"
             type="text"
             name="name"
             value={form.name}
             onChange={handleChange}
             required
-            placeholder="Full Name"
+            placeholder="Nome completo"
           />
           <svg
             xmlns="http://www.w3.org/2000/svg"
             width="24"
             height="24"
             viewBox="0 0 24 24"
-            className="absolute left-2 top-1/2 transform -translate-y-1/25" // Centraliza verticalmente
+            className="absolute left-2 top-1/2 transform -translate-y-1/25"
           >
             <g fill="none" stroke="#000" strokeWidth="1.5">
               <circle cx="12" cy="6" r="4" />
@@ -112,7 +101,6 @@ const PatientRegister = ({ onClose }) => {
         </div>
 
         <div className="flex justify-between gap-4">
-          {/* Input de Data de Nascimento */}
           <div className="relative w-2/5">
             <input
               className="bg-gray-soft w-full p-1 my-3 rounded-md border focus:outline-none pl-10"
@@ -135,7 +123,6 @@ const PatientRegister = ({ onClose }) => {
             </svg>
           </div>
 
-          {/* Input de Idade */}
           <div className="relative w-3/10">
             <input
               className="bg-gray-soft w-full p-1 my-3 rounded-md border focus:outline-none pl-10 placeholder-black"
@@ -145,7 +132,7 @@ const PatientRegister = ({ onClose }) => {
               onChange={handleChange}
               required
               min="0"
-              placeholder="Age"
+              placeholder="Idade"
             />
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -160,7 +147,6 @@ const PatientRegister = ({ onClose }) => {
             </svg>
           </div>
 
-          {/* Select de Gênero */}
           <div className="relative w-3/10">
             <select
               className="bg-gray-soft w-full p-1 my-3 rounded-md border focus:outline-none pl-10 appearance-none placeholder-black"
@@ -169,10 +155,10 @@ const PatientRegister = ({ onClose }) => {
               onChange={handleChange}
               required
             >
-              <option value="">Gender</option>
-              <option value="M">Male</option>
-              <option value="F">Female</option>
-              <option value="O">Other</option>
+              <option value="">Sexo</option>
+              <option value="M">Masculino</option>
+              <option value="F">Feminino</option>
+              <option value="O">Outro</option>
             </select>
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -186,20 +172,18 @@ const PatientRegister = ({ onClose }) => {
                 <path d="M20 17.5c0 2.485 0 4.5-8 4.5s-8-2.015-8-4.5S7.582 13 12 13s8 2.015 8 4.5Z" />
               </g>
             </svg>
-            {/* Seta do select (adicione se quiser) */}
             <svg
               xmlns="http://www.w3.org/2000/svg"
               width="16"
               height="16"
               viewBox="0 0 24 24"
-              className="absolute right-2 top-1/2 transform -translate-y-1/2 pointer-events-none "
+              className="absolute right-2 top-1/2 transform -translate-y-1/2 pointer-events-none"
             >
               <path fill="currentColor" d="m7 10l5 5l5-5z" />
             </svg>
           </div>
         </div>
         <div className="flex justify-between gap-4">
-          {/* Input de Endereço */}
           <div className="relative w-3/5">
             <input
               className="bg-gray-soft w-full p-1 my-3 rounded-md border focus:outline-none pl-10 placeholder-black"
@@ -208,7 +192,7 @@ const PatientRegister = ({ onClose }) => {
               value={form.address}
               onChange={handleChange}
               required
-              placeholder="Address"
+              placeholder="Morada"
             />
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -224,7 +208,6 @@ const PatientRegister = ({ onClose }) => {
             </svg>
           </div>
 
-          {/* Input de Ocupação */}
           <div className="relative w-2/5">
             <input
               className="bg-gray-soft w-full p-1 my-3 rounded-md border focus:outline-none pl-10 placeholder-black"
@@ -232,7 +215,7 @@ const PatientRegister = ({ onClose }) => {
               name="occupation"
               value={form.occupation}
               onChange={handleChange}
-              placeholder="Occupation"
+              placeholder="Profissão"
             />
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -248,7 +231,6 @@ const PatientRegister = ({ onClose }) => {
           </div>
         </div>
         <div className="flex justify-between gap-4">
-          {/* Input de Email */}
           <div className="relative w-3/5">
             <input
               className="bg-gray-soft w-full p-1 my-3 rounded-md border focus:outline-none pl-10 placeholder-black"
@@ -272,7 +254,6 @@ const PatientRegister = ({ onClose }) => {
             </svg>
           </div>
 
-          {/* Input de Telefone */}
           <div className="relative w-2/5">
             <input
               className="bg-gray-soft w-full p-1 my-3 rounded-md border focus:outline-none pl-10 placeholder-black"
@@ -281,7 +262,7 @@ const PatientRegister = ({ onClose }) => {
               value={form.phone}
               onChange={handleChange}
               required
-              placeholder="Phone Number"
+              placeholder="Telefone"
             />
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -295,50 +276,26 @@ const PatientRegister = ({ onClose }) => {
               </g>
             </svg>
           </div>
-        </div>        <div className="flex justify-start items-center mb-6 mt-3 p-1">
-          <p>This section is used to upload exams of the patient:</p>
-          <label className={`${dicomFile ? 'bg-green-500 text-white' : 'bg-gray-soft text-black'} border py-1 px-3 rounded-md cursor-pointer ml-5 transition-colors duration-200`}>
-            {dicomFile ? '✓ Document uploaded' : 'Upload documents'}
-            <input
-              type="file"
-              accept=".dcm,application/dicom"
-              onChange={handleFileChange}
-              className="hidden"
-            />
-          </label>
-          {dicomFile && (
-            <div className="ml-3 flex items-center text-sm text-gray-600">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                className="mr-1"
-              >
-                <path fill="currentColor" d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" />
-              </svg>
-              <span className="truncate max-w-48">{dicomFile.name}</span>
-            </div>
-          )}
         </div>
-        <div className="flex gap-4">
+
+        <div className="flex gap-4 mt-6">
           <button
             className="bg-green h-10 w-40 uppercase text-white rounded-md"
             type="submit"
             disabled={loading}
           >
-            {loading ? "Saving..." : "Apply"}
+            {loading ? "A guardar..." : "Guardar"}
           </button>
           <button
             type="button"
             onClick={handleClose}
             className="bg-gray-300 h-10 w-40 uppercase text-black rounded-md hover:bg-gray-400"
           >
-            Close
+            Fechar
           </button>
 
           {success && (
-            <p className='text-green-500'>Patient successfully registered!</p>
+            <p className='text-green-500'>Doente registado com sucesso!</p>
           )}
           {error && <p className='text-red'>{error}</p>}
         </div>

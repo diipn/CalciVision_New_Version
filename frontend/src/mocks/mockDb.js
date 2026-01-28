@@ -53,18 +53,20 @@ const ensureExamFrames = (db, exam) => {
   const frames = (exam.frames || ['/calcivision_logo.png']).map((imageUrl, index) => ({
     id: `${exam.id}-${index + 1}`,
     image_url: imageUrl,
-    data: [
-      {
-        x: 80 + index * 12,
-        y: 70 + index * 8,
-        width: 110,
-        height: 90,
-        is_annotation_generated: true,
-        is_calcified: exam.vo >= 0.66 ? 1 : 0,
-        confidence: Math.round(exam.vo * 100),
-        is_calcification_generated: true,
-      },
-    ],
+    data: exam.hasUploadedFrames
+      ? []
+      : [
+          {
+            x: 80 + index * 12,
+            y: 70 + index * 8,
+            width: 110,
+            height: 90,
+            is_annotation_generated: true,
+            is_calcified: exam.vo >= 0.66 ? 1 : 0,
+            confidence: Math.round(exam.vo * 100),
+            is_calcification_generated: true,
+          },
+        ],
   }));
   exam.framesData = frames;
   return frames;
@@ -180,12 +182,14 @@ export const mockDb = {
   },
   createReport: ({ patientId, examId, reportText }) => {
     const db = readDb();
-    const exam = db.exams.find((item) => item.id === Number(examId)) || db.exams.find((item) => item.patientId === Number(patientId));
+    const exam =
+      db.exams.find((item) => item.id === Number(examId)) ||
+      db.exams.find((item) => item.patientId === Number(patientId));
     const newReport = {
       id: Date.now(),
       patientId: Number(patientId),
       patient: Number(patientId),
-      examId: Number(examId),
+      examId: Number(exam?.id || examId),
       created_at: new Date().toISOString(),
       reportText,
       pdf_name: `report_${patientId}_${Date.now()}.pdf`,
@@ -211,13 +215,16 @@ export const mockDb = {
   },
   createPatient: (patientData) => {
     const db = readDb();
+    const payload = patientData instanceof FormData
+      ? Object.fromEntries(patientData.entries())
+      : patientData;
     const newPatient = {
       id: Date.now(),
-      name: patientData?.name || 'Novo paciente',
-      age: patientData?.age || 60,
-      sex: patientData?.sex || 'F',
-      email: patientData?.email || 'novo@example.com',
-      address: patientData?.address || 'Rua Simulada 1',
+      name: payload?.name || 'Novo doente',
+      age: payload?.age || 60,
+      sex: payload?.sex || payload?.gender || 'F',
+      email: payload?.email || 'novo@example.com',
+      address: payload?.address || 'Rua Simulada 1',
       status: 'PENDING',
       updated_at: new Date().toISOString(),
       has_report: false,
@@ -239,6 +246,29 @@ export const mockDb = {
       vo: 0.45,
       frames: ['/calcivision_logo.png', '/grid-texture.png', '/calcivision_logo.png'],
     };
+    db.exams.push(newExam);
+    writeDb(db);
+    return newExam;
+  },
+  addExamWithFrames: (patientId, description, frames) => {
+    const db = readDb();
+    const newExam = {
+      id: Date.now(),
+      patientId: Number(patientId),
+      date: new Date().toISOString().split('T')[0],
+      type: 'Eco transtorácico',
+      description: description || 'Novo ecocardiograma',
+      status: 'IN_PROGRESS',
+      uploaded_at: new Date().toISOString(),
+      vo: 0,
+      frames,
+      hasUploadedFrames: true,
+    };
+    newExam.framesData = frames.map((imageUrl, index) => ({
+      id: `${newExam.id}-${index + 1}`,
+      image_url: imageUrl,
+      data: [],
+    }));
     db.exams.push(newExam);
     writeDb(db);
     return newExam;
@@ -348,7 +378,13 @@ export const mockApi = {
     }
     if (url.startsWith('/api/reports/') && url.endsWith('/create/')) {
       const patientId = url.split('/api/reports/')[1]?.split('/')[0];
-      return buildResponse(mockDb.createReport({ patientId, reportText: payload?.reportText }));
+      return buildResponse(
+        mockDb.createReport({
+          patientId,
+          examId: payload?.examId,
+          reportText: payload?.reportText,
+        })
+      );
     }
     if (url.startsWith('/api/model/')) {
       return buildResponse({ task_id: 'mock-task' }, 202);

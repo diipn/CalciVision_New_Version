@@ -82,10 +82,45 @@ def process_echocardiogram(dicom, patient):
 def ler_dicom(dicom_path):
     """Lê um DICOM e extrai a imagem como array numpy"""
     dicom = pydicom.dcmread(dicom_path, force=True)
+
+    transfer_syntax = getattr(getattr(dicom, "file_meta", None), "TransferSyntaxUID", None)
+    sop_class_uid = getattr(dicom, "SOPClassUID", None)
+    modality = getattr(dicom, "Modality", None)
+
+    def _contexto_dicom() -> str:
+        ts_value = str(transfer_syntax) if transfer_syntax else "Unknown"
+        sop_value = str(sop_class_uid) if sop_class_uid else "Unknown"
+        modality_value = str(modality) if modality else "Unknown"
+        return f"TransferSyntaxUID={ts_value} | SOPClassUID={sop_value} | Modality={modality_value}"
+
+    is_compressed = False
+    if transfer_syntax is not None:
+        try:
+            is_compressed = bool(transfer_syntax.is_compressed)
+        except Exception:
+            is_compressed = False
+
+    if is_compressed:
+        try:
+            dicom.decompress()
+        except Exception as exc:
+            raise ValueError(
+                f"Falha ao descomprimir o DICOM. {_contexto_dicom()}. Erro: {exc}"
+            ) from exc
+
+    if "PixelData" not in dicom:
+        raise ValueError(
+            f"O DICOM não contém PixelData. {_contexto_dicom()}."
+        )
     
     # Tenta obter a imagem
     if hasattr(dicom, 'pixel_array'):
-        img_array = dicom.pixel_array
+        try:
+            img_array = dicom.pixel_array
+        except Exception as exc:
+            raise ValueError(
+                f"Falha ao ler pixel_array do DICOM. {_contexto_dicom()}. Erro: {exc}"
+            ) from exc
         
         # Algumas imagens vêm em modo monocromático invertido (negativo)
         if getattr(dicom, "PhotometricInterpretation", "") == "MONOCHROME1":
@@ -102,7 +137,9 @@ def ler_dicom(dicom_path):
         
         return dicom, img_array
     else:
-        raise ValueError("O DICOM não contém dados de imagem válidos.")
+        raise ValueError(
+            f"O DICOM não contém dados de imagem válidos. {_contexto_dicom()}."
+        )
          
 
 def extrair_frames(dicom_path) -> list[tuple[np.ndarray, int]]:

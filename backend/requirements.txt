@@ -13,6 +13,10 @@ numpy==1.23.5
 pillow
 opencv-python-headless
 pydicom
+pylibjpeg
+pylibjpeg-libjpeg
+pylibjpeg-openjpeg
+python-gdcm
 onnxruntime
 celery==5.3.1
 celery-types

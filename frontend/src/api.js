@@ -10,19 +10,6 @@ const api = useMocks
       baseURL: import.meta.env.VITE_API_URL,
     });
 
-const readFilesAsDataUrls = (files) => {
-  const readers = files.map(
-    (file) =>
-      new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = () => reject(reader.error);
-        reader.readAsDataURL(file);
-      })
-  );
-  return Promise.all(readers);
-};
-
 if (!useMocks) {
   // Interceptor para adicionar o token de autenticação antes de cada requisição
   api.interceptors.request.use(
@@ -142,12 +129,7 @@ export const createReport = async (formData, patientId, examId) => {
 
 export const createExamWithFrames = async (patientId, description, frames) => {
   if (useMocks) {
-    const shouldConvert =
-      typeof File !== "undefined" &&
-      Array.isArray(frames) &&
-      frames.some((frame) => frame instanceof File);
-    const payload = shouldConvert ? await readFilesAsDataUrls(frames) : frames;
-    return mockDb.addExamWithFrames(patientId, description, payload);
+    return mockDb.addExamWithFrames(patientId, description, frames);
   }
   const formData = new FormData();
   formData.append("description", description);

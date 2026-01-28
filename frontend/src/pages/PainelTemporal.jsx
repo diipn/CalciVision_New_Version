@@ -1,6 +1,15 @@
 import { useMemo, useState } from "react";
 import MainLayout from "../layouts/MainLayout";
 
+// ✅ Escala apenas para apresentação (não afecta cálculos/alertas)
+const VALUE_SCALE = 10;
+const toDisplayValue = (v) => v / VALUE_SCALE;
+const formatDisplayValue = (v) => {
+  // 95 -> 9.5 (mantém 1 casa); 470 -> 47 (sem casas)
+  const rounded1 = Math.round(v * 10) / 10;
+  return Number.isInteger(rounded1) ? String(rounded1) : rounded1.toFixed(1);
+};
+
 // ---------------------------
 // Mock data (protótipo)
 // ---------------------------
@@ -12,7 +21,6 @@ const MOCK_PATIENTS = [
     sex: "M",
     lastExamDate: "2026-01-12",
     objectiveVarName: "Índice de Calcificação",
-    unit: "pts",
     exams: [
       { date: "2024-03-10", value: 210 },
       { date: "2024-10-10", value: 275 },
@@ -27,7 +35,6 @@ const MOCK_PATIENTS = [
     sex: "F",
     lastExamDate: "2025-12-20",
     objectiveVarName: "Índice de Calcificação",
-    unit: "pts",
     exams: [
       { date: "2024-01-07", value: 120 },
       { date: "2024-09-07", value: 140 },
@@ -42,7 +49,6 @@ const MOCK_PATIENTS = [
     sex: "M",
     lastExamDate: "2026-01-03",
     objectiveVarName: "Índice de Calcificação",
-    unit: "pts",
     exams: [
       { date: "2024-07-03", value: 340 },
       { date: "2025-01-03", value: 410 },
@@ -57,7 +63,6 @@ const MOCK_PATIENTS = [
     sex: "F",
     lastExamDate: "2025-11-05",
     objectiveVarName: "Índice de Calcificação",
-    unit: "pts",
     exams: [
       { date: "2024-05-05", value: 95 },
       { date: "2024-11-05", value: 98 },
@@ -121,16 +126,10 @@ function computeTrend(exams) {
   return { label: "Estável", score: 0 };
 }
 
-function computePriorityIndex({ ratePct, lastValue, alertLevel }) {
-  const rateComponent = clamp(ratePct, 0, 250) * 0.6;
-  const valueComponent = clamp(lastValue / 10, 0, 200) * 0.3;
-  const alertBoost = alertLevel === "critical" ? 25 : alertLevel === "warning" ? 12 : 0;
-  return Math.round(rateComponent + valueComponent + alertBoost);
-}
-
 function getAlertLevel({ rateMonthlyPct, rateAnnualPct, lastValue, thresholds }) {
   const { monthlyWarn, monthlyCrit, annualWarn, annualCrit, valueWarn, valueCrit } = thresholds;
 
+  // ✅ lastValue e thresholds continuam RAW (sem escala)
   if (rateMonthlyPct >= monthlyCrit || rateAnnualPct >= annualCrit || lastValue >= valueCrit) return "critical";
   if (rateMonthlyPct >= monthlyWarn || rateAnnualPct >= annualWarn || lastValue >= valueWarn) return "warning";
   return "none";
@@ -203,7 +202,7 @@ function Sparkline({ values = [], height = 26 }) {
 // ---------------------------
 export default function PainelTemporal() {
   const [period, setPeriod] = useState("monthly");
-  const [sortBy, setSortBy] = useState("priority");
+  const [sortBy, setSortBy] = useState("rate");
   const [sortDir, setSortDir] = useState("desc");
   const [search, setSearch] = useState("");
   const [onlyAlerts, setOnlyAlerts] = useState(false);
@@ -219,8 +218,13 @@ export default function PainelTemporal() {
 
   const rows = useMemo(() => {
     const mapped = MOCK_PATIENTS.map((p) => {
-      const values = p.exams.map((e) => e.value);
-      const lastValue = values[values.length - 1] ?? 0;
+      // ✅ valores RAW (para cálculos e alertas)
+      const valuesRaw = p.exams.map((e) => e.value);
+      const lastValueRaw = valuesRaw[valuesRaw.length - 1] ?? 0;
+
+      // ✅ valores DISPLAY (só para UI)
+      const valuesDisplay = valuesRaw.map(toDisplayValue);
+      const lastValueDisplay = toDisplayValue(lastValueRaw);
 
       const rateMonthlyPct = computeRatePercent(p.exams, "monthly");
       const rateAnnualPct = computeRatePercent(p.exams, "annual");
@@ -229,23 +233,23 @@ export default function PainelTemporal() {
       const alertLevel = getAlertLevel({
         rateMonthlyPct,
         rateAnnualPct,
-        lastValue,
-        thresholds,
+        lastValue: lastValueRaw, // ✅ RAW
+        thresholds, // ✅ RAW
       });
 
       const rateToShow = period === "annual" ? rateAnnualPct : rateMonthlyPct;
-      const priorityIndex = computePriorityIndex({ ratePct: rateToShow, lastValue, alertLevel });
 
       return {
         ...p,
-        values,
-        lastValue,
+        valuesRaw,
+        lastValueRaw,
+        valuesDisplay,
+        lastValueDisplay,
         rateMonthlyPct,
         rateAnnualPct,
         rateToShow,
         trend,
         alertLevel,
-        priorityIndex,
       };
     });
 
@@ -262,8 +266,7 @@ export default function PainelTemporal() {
     filtered.sort((a, b) => {
       if (sortBy === "name") return a.name.localeCompare(b.name) * dir;
       if (sortBy === "lastExam") return (parseISODate(a.lastExamDate) - parseISODate(b.lastExamDate)) * dir;
-      if (sortBy === "rate") return (a.rateToShow - b.rateToShow) * dir;
-      return (a.priorityIndex - b.priorityIndex) * dir;
+      return (a.rateToShow - b.rateToShow) * dir;
     });
 
     return filtered;
@@ -275,10 +278,13 @@ export default function PainelTemporal() {
     const avgRate = rows.reduce((acc, r) => acc + r.rateToShow, 0) / rows.length;
     const critical = rows.filter((r) => r.alertLevel === "critical").length;
     const warning = rows.filter((r) => r.alertLevel === "warning").length;
-    const top = [...rows].sort((a, b) => b.priorityIndex - a.priorityIndex)[0];
+
+    const top = [...rows].sort((a, b) => b.rateToShow - a.rateToShow)[0];
 
     return { avgRate, critical, warning, topName: top?.name ?? "—" };
   }, [rows]);
+
+  const critRate = period === "annual" ? thresholds.annualCrit : thresholds.monthlyCrit;
 
   return (
     <MainLayout pageTitle="Painel Temporal - CalciVision">
@@ -289,7 +295,7 @@ export default function PainelTemporal() {
             <h1 className="text-3xl font-semibold text-gray-dark">Painel Temporal</h1>
             <p className="text-gray-medium mt-1 max-w-3xl">
               Visualização da evolução da variável objetiva ao longo do tempo. Protótipo para comparar exames,
-              calcular taxas de progressão, priorizar doentes e sinalizar alertas clínicos.
+              calcular taxas de progressão e sinalizar alertas clínicos.
             </p>
           </div>
 
@@ -321,9 +327,7 @@ export default function PainelTemporal() {
             <p className="text-sm text-gray-medium">Evolução geral</p>
             <p className="mt-1 text-2xl font-semibold text-gray-dark">
               {formatPct(summary.avgRate)}
-              <span className="text-sm font-medium text-gray-medium ml-2">
-                / {period === "annual" ? "ano" : "mês"}
-              </span>
+              <span className="text-sm font-medium text-gray-medium ml-2">/ {period === "annual" ? "ano" : "mês"}</span>
             </p>
             <p className="mt-2 text-sm text-gray-medium">Média da progressão (protótipo).</p>
           </div>
@@ -334,25 +338,19 @@ export default function PainelTemporal() {
               <Chip tone="critical">❗ Críticos: {summary.critical}</Chip>
               <Chip tone="warning">⚠ Avisos: {summary.warning}</Chip>
             </div>
-            <p className="mt-2 text-sm text-gray-medium">
-              Sinalização quando a progressão ultrapassa limiares.
-            </p>
+            <p className="mt-2 text-sm text-gray-medium">Sinalização quando a progressão ultrapassa limiares.</p>
           </div>
 
           <div className="rounded-2xl bg-white border border-gray-200 p-4">
-            <p className="text-sm text-gray-medium">Prioridade máxima</p>
+            <p className="text-sm text-gray-medium">Maior progressão</p>
             <p className="mt-1 text-2xl font-semibold text-gray-dark">{summary.topName}</p>
-            <p className="mt-2 text-sm text-gray-medium">
-              Ordena automaticamente por índice de prioridade (protótipo).
-            </p>
+            <p className="mt-2 text-sm text-gray-medium">Doente com a taxa mais elevada no período seleccionado.</p>
           </div>
 
           <div className="rounded-2xl bg-white border border-gray-200 p-4">
             <p className="text-sm text-gray-medium">Previsão</p>
             <p className="mt-1 text-2xl font-semibold text-gray-dark">Tendência</p>
-            <p className="mt-2 text-sm text-gray-medium">
-              Placeholder para IA/ML (ex.: regressão, séries temporais).
-            </p>
+            <p className="mt-2 text-sm text-gray-medium">Placeholder para IA/ML (ex.: regressão, séries temporais).</p>
           </div>
         </div>
 
@@ -386,8 +384,7 @@ export default function PainelTemporal() {
                 onChange={(e) => setSortBy(e.target.value)}
                 className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-dark outline-none focus:border-green"
               >
-                <option value="priority">Prioridade clínica</option>
-                <option value="rate">Taxa de progressão</option>
+                <option value="rate">Prioridade clínica</option>
                 <option value="lastExam">Data do último exame</option>
                 <option value="name">Nome</option>
               </select>
@@ -409,7 +406,9 @@ export default function PainelTemporal() {
               <Chip tone="neutral">
                 Limiar crítico: {period === "annual" ? thresholds.annualCrit : thresholds.monthlyCrit}%
               </Chip>
-              <Chip tone="neutral">Valor crítico: ≥ {thresholds.valueCrit} pts</Chip>
+
+              {/* ✅ Mostra limiar de valor em escala, mas lógica continua RAW */}
+              <Chip tone="neutral">Valor crítico: ≥ {formatDisplayValue(toDisplayValue(thresholds.valueCrit))}</Chip>
             </div>
           </div>
         </div>
@@ -422,17 +421,16 @@ export default function PainelTemporal() {
           </div>
 
           <div className="overflow-auto">
-            <table className="min-w-[1100px] w-full">
+            <table className="min-w-[1050px] w-full">
               <thead className="bg-green-light">
                 <tr className="text-left">
                   <th className="px-4 py-3 text-sm font-semibold text-gray-dark">Doente</th>
                   <th className="px-4 py-3 text-sm font-semibold text-gray-dark">Evolução</th>
-                  <th className="px-4 py-3 text-sm font-semibold text-gray-dark">Último valor</th>
+                  <th className="px-4 py-3 text-sm font-semibold text-gray-dark">Variável objetiva (último)</th>
                   <th className="px-4 py-3 text-sm font-semibold text-gray-dark">
                     Taxa {period === "annual" ? "anual" : "mensal"}
                   </th>
                   <th className="px-4 py-3 text-sm font-semibold text-gray-dark">Tendência</th>
-                  <th className="px-4 py-3 text-sm font-semibold text-gray-dark">Prioridade</th>
                   <th className="px-4 py-3 text-sm font-semibold text-gray-dark">Alertas</th>
                   <th className="px-4 py-3 text-sm font-semibold text-gray-dark">Último exame</th>
                 </tr>
@@ -440,7 +438,7 @@ export default function PainelTemporal() {
 
               <tbody>
                 {rows.map((r) => {
-                  const urgent = r.alertLevel === "critical" || r.priorityIndex >= 110;
+                  const urgent = r.alertLevel === "critical" || r.rateToShow >= critRate;
 
                   const rowBg =
                     r.alertLevel === "critical"
@@ -472,7 +470,8 @@ export default function PainelTemporal() {
 
                       <td className="px-4 py-4">
                         <div className="flex items-center gap-3">
-                          <Sparkline values={r.values} />
+                          {/* ✅ Sparkline com valores DISPLAY */}
+                          <Sparkline values={r.valuesDisplay} />
                           <div className="text-sm text-gray-medium">
                             <p className="text-gray-dark font-medium">{r.objectiveVarName}</p>
                             <p>
@@ -483,10 +482,11 @@ export default function PainelTemporal() {
                       </td>
 
                       <td className="px-4 py-4">
+                        {/* ✅ Mostra último valor DISPLAY, sem afectar alertas */}
                         <p className="text-gray-dark font-semibold">
-                          {r.lastValue} <span className="text-sm text-gray-medium">{r.unit}</span>
+                          {formatDisplayValue(r.lastValueDisplay)}
                         </p>
-                        <p className="text-sm text-gray-medium">{r.values.length} exames</p>
+                        <p className="text-sm text-gray-medium">{r.valuesRaw.length} exames</p>
                       </td>
 
                       <td className="px-4 py-4">
@@ -503,13 +503,6 @@ export default function PainelTemporal() {
                           </Chip>
                           <p className="text-xs text-gray-medium">(placeholder para modelo preditivo)</p>
                         </div>
-                      </td>
-
-                      <td className="px-4 py-4">
-                        <p className="text-gray-dark font-semibold">{r.priorityIndex}</p>
-                        <p className="text-sm text-gray-medium">
-                          {r.priorityIndex >= 130 ? "Muito urgente" : r.priorityIndex >= 100 ? "Urgente" : "Vigilância"}
-                        </p>
                       </td>
 
                       <td className="px-4 py-4">
@@ -538,7 +531,7 @@ export default function PainelTemporal() {
 
                 {rows.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-4 py-10 text-center text-gray-medium">
+                    <td colSpan={7} className="px-4 py-10 text-center text-gray-medium">
                       Não foram encontrados resultados.
                     </td>
                   </tr>

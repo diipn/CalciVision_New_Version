@@ -49,9 +49,8 @@ const AnnotationTool = forwardRef(function AnnotationTool({ frames, currentFrame
 
     useImperativeHandle(ref, () => ({
         iniciarAnotacaoManual() {
-            if (rects[currentFrame]?.length === 0) {
-                setIsDrawing(true);
-            }
+            setSelectedRect(null);
+            setIsDrawing(true);
         },
         cancelarAnotacaoManual() {
             setIsDrawing(false);
@@ -190,8 +189,6 @@ const AnnotationTool = forwardRef(function AnnotationTool({ frames, currentFrame
                         x: currentRect.width < 0 ? currentRect.x + currentRect.width : currentRect.x,
                         y: currentRect.height < 0 ? currentRect.y + currentRect.height : currentRect.y
                     },
-                    // Espalha os restantes retângulos da imagem
-                    ...updatedRects[currentFrame]
                 ]
                 return updatedRects
             });

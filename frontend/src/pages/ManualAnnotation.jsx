@@ -78,20 +78,19 @@ export default function ManualAnnotation() {
         );
 
         const formattedPredictedValveBoxes = data.map((frame) => {
-          frame.data
-            ? frame.data.map((rect) => {
-                if (rect.is_annotation_generated)
-                  return {
-                    x: rect.x,
-                    y: rect.y,
-                    width: rect.width,
-                    height: rect.height,
-                    id: 'prediction',
-                    is_annotation_generated: true,
-                  };
-              })
-            : [];
+          if (!frame.data?.length) return [];
+          return frame.data
+            .filter((rect) => rect.is_annotation_generated)
+            .map((rect) => ({
+              x: rect.x,
+              y: rect.y,
+              width: rect.width,
+              height: rect.height,
+              id: 'prediction',
+              is_annotation_generated: true,
+            }));
         });
+
 
         const formattedCalcification = data.map((frame) =>
           frame.data?.[0] && frame.data[0].is_calcified !== null

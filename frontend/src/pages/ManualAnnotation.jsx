@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import MainLayout from '../layouts/MainLayout';
 import AnnotationTool from '../components/AnnotationTool';
-import AnnotationToolMenu from '../components/AnnotationToolMenu';
+import AnalysisWizard from '../components/AnalysisWizard';
+import FrameNavigator from '../components/FrameNavigator';
 import { useParams } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 import api, { getExamSettings, updateExamSettings } from '../api';
+import { useUnsavedStore } from '../store/useUnsavedStore';
 import { defaultImageSettings } from '../mocks/mockDb';
 
 export default function ManualAnnotation() {
@@ -18,11 +20,13 @@ export default function ManualAnnotation() {
   const [predictedValveBoxes, setPredictedValveBoxes] = useState([]);
   const [calcificationStatus, setCalcificationStatus] = useState(null);
   const [imageSettings, setImageSettings] = useState(defaultImageSettings);
+  const annotationToolRef = useRef(null);
 
   const [patient, setPatient] = useState(null);
   const [exam, setExam] = useState(null);
   const { patientId, echoId } = useParams();
   const navigate = useNavigate();
+  const { setUnsavedChanges } = useUnsavedStore();
 
   useEffect(() => {
     const fetchFrames = async () => {
@@ -147,43 +151,54 @@ export default function ManualAnnotation() {
   const handleImageSettingsChange = async (nextSettings) => {
     setImageSettings(nextSettings);
     await updateExamSettings(echoId, { imageSettings: nextSettings });
+    setUnsavedChanges(true);
   };
 
   return (
-    <MainLayout pageTitle={`${patient && patient.name} Analysis - CalciVision`}>
-      {/* Annotation tool and menu */}
-      <div className="w-full mb-8 grid grid-cols-[auto_1fr] grid-rows-1 gap-5 justify-items-start">
-        <AnnotationTool
-          frames={frames}
-          currentFrame={currentFrame}
-          setCurrentFrame={setCurrentFrame}
-          rects={rects}
-          setRects={setRects}
-          calcificationStatus={calcificationStatus}
-          setCalcificationStatus={setCalcificationStatus}
-          predictedValveBoxes={predictedValveBoxes}
-          setPredictedValveBoxes={setPredictedValveBoxes}
-          calcification={calcification}
-          setCalcification={setCalcification}
-          predictionHistory={predictionHistory}
-          setPredictionHistory={setPredictionHistory}
-          imageSettings={imageSettings}
-          onImageSettingsChange={handleImageSettingsChange}
-        />
-        <AnnotationToolMenu
-          frames={frames}
-          currentFrame={currentFrame}
-          rects={rects}
-          calcificationStatus={calcificationStatus}
-          setCalcificationStatus={setCalcificationStatus}
-          calcification={calcification}
-          setCalcification={setCalcification}
-          predictionHistory={predictionHistory}
-          patient={patient}
-          exam={exam}
-          echoId={echoId}
-        />
-      </div>
+    <MainLayout pageTitle={`Anotação da Válvula Aórtica — ${patient?.name || 'CalciVision'}`}>
+      <AnalysisWizard
+        annotationToolRef={annotationToolRef}
+        frames={frames}
+        rects={rects}
+        calcification={calcification}
+        calcificationStatus={calcificationStatus}
+        setCalcificationStatus={setCalcificationStatus}
+        predictionHistory={predictionHistory}
+        patient={patient}
+        exam={exam}
+        echoId={echoId}
+        imageSettings={imageSettings}
+        onImageSettingsChange={handleImageSettingsChange}
+        defaultImageSettings={defaultImageSettings}
+        renderCanvas={(handleAnnotationChanged) => (
+          <>
+            <AnnotationTool
+              ref={annotationToolRef}
+              frames={frames}
+              currentFrame={currentFrame}
+              rects={rects}
+              setRects={setRects}
+              calcificationStatus={calcificationStatus}
+              setCalcificationStatus={setCalcificationStatus}
+              predictedValveBoxes={predictedValveBoxes}
+              setPredictedValveBoxes={setPredictedValveBoxes}
+              calcification={calcification}
+              setCalcification={setCalcification}
+              predictionHistory={predictionHistory}
+              setPredictionHistory={setPredictionHistory}
+              imageSettings={imageSettings}
+              onImageSettingsChange={handleImageSettingsChange}
+              onAnnotationChange={handleAnnotationChanged}
+            />
+            <FrameNavigator
+              frames={frames}
+              rects={rects}
+              currentFrame={currentFrame}
+              setCurrentFrame={setCurrentFrame}
+            />
+          </>
+        )}
+      />
     </MainLayout>
   );
 }

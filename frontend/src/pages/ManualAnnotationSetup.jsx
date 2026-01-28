@@ -96,9 +96,6 @@ export default function ManualAnnotationSetup() {
       setUploadError("Erro ao carregar o ecocardiograma. Tente novamente.");
     } finally {
       setUploading(false);
-      if (event.target) {
-        event.target.value = "";
-      }
     }
   };
 
@@ -106,7 +103,7 @@ export default function ManualAnnotationSetup() {
 
   return (
     <MainLayout pageTitle="Iniciar análise - CalciVision">
-      <div className="max-w-xl space-y-6">
+      <div className="max-w-2xl space-y-6">
         <header className="space-y-2">
           <h3 className="text-xl font-semibold">Iniciar análise</h3>
           <p className="text-gray-600">Seleccione o doente e o ecocardiograma a analisar.</p>
@@ -117,7 +114,7 @@ export default function ManualAnnotationSetup() {
             <span className="text-sm font-semibold text-gray-700">Doente</span>
             <select
               name="patient"
-              className="w-full max-w-md px-4 py-2 border-2 border-green-dark rounded-md bg-white"
+              className="w-full max-w-lg px-4 py-2 border-2 border-green-dark rounded-md bg-white"
               onChange={(event) => handlePatientChange(event.target.value)}
               value={selectedPatientId}
             >
@@ -134,7 +131,7 @@ export default function ManualAnnotationSetup() {
             <div className="flex flex-wrap items-center gap-3">
               <button
                 type="button"
-                className={`w-fit rounded-md px-4 py-2 text-sm font-semibold whitespace-nowrap ${
+                className={`rounded-md px-3 py-2 text-sm font-semibold ${
                   echoMode === "upload"
                     ? "border border-green-dark bg-green-dark text-white"
                     : "border border-green-pale text-green-dark"
@@ -146,7 +143,7 @@ export default function ManualAnnotationSetup() {
               </button>
               <button
                 type="button"
-                className={`w-fit rounded-md px-4 py-2 text-sm font-semibold whitespace-nowrap ${
+                className={`rounded-md px-3 py-2 text-sm font-semibold ${
                   echoMode === "existing"
                     ? "border border-green-dark bg-green-dark text-white"
                     : "border border-green-pale text-green-dark"
@@ -164,7 +161,7 @@ export default function ManualAnnotationSetup() {
                   <span className="text-sm font-semibold text-gray-700">Ecocardiograma</span>
                   <select
                     name="echocardiogram"
-                    className="w-full max-w-md px-4 py-2 border-2 border-green-dark rounded-md bg-white"
+                    className="w-full max-w-lg px-4 py-2 border-2 border-green-dark rounded-md bg-white"
                     onChange={(event) => setSelectedEchoId(event.target.value)}
                     value={selectedEchoId}
                     disabled={!selectedPatientId}
@@ -183,7 +180,7 @@ export default function ManualAnnotationSetup() {
             {echoMode === "upload" && (
               <div className="mt-4 space-y-3">
                 <label className="inline-flex items-center gap-3">
-                  <span className={`w-fit rounded-md px-4 py-2 text-sm font-semibold text-white ${
+                  <span className={`rounded-md px-4 py-2 text-sm font-semibold text-white ${
                     selectedPatientId ? "bg-green-dark" : "bg-gray-medium"
                   }`}>
                     Carregar ecocardiograma
@@ -203,7 +200,7 @@ export default function ManualAnnotationSetup() {
                 {uploading && <p className="text-sm text-gray-600">A carregar ficheiros...</p>}
                 {uploadError && <p className="text-sm text-red">{uploadError}</p>}
                 {uploadCount > 0 && (
-                  <div className="rounded-md bg-white p-3 text-sm text-gray-700 max-w-md">
+                  <div className="rounded-md bg-white p-3 text-sm text-gray-700 max-w-lg">
                     <p className="font-semibold">{uploadCount} ficheiro(s) carregado(s)</p>
                     <ul className="mt-2 list-disc pl-5 text-xs">
                       {uploadedFiles.map((file) => (

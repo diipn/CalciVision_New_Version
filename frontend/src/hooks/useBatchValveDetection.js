@@ -1,11 +1,16 @@
 import { useRef, useState } from 'react';
 import api from '../api';
+import { buildModelWsUrl } from '../utils/ws';
 
 export function useBatchValveDetection() {
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState({});
   const progressRef = useRef({});
   const sockets = useRef({});
+  const [error, setError] = useState(null);
+
+  const wsErrorMessage =
+    'Não foi possível ligar ao serviço de IA. Verifique se o backend está activo.';
 
   const setAndTrackProgress = (newData) => {
     for (const [imageName, updates] of Object.entries(newData)) {
@@ -22,6 +27,7 @@ export function useBatchValveDetection() {
     if (!images || images.length == 0) return;
     setIsLoading(true);
     setProgress({});
+    setError(null);
 
     try {
       const formData = new FormData();
@@ -51,11 +57,18 @@ export function useBatchValveDetection() {
       const batchId = response.data.task_id;
 
       // Criação de uma conexão WebSocket para ir recebendo o progresso e os resultados
-      const socket = new WebSocket(import.meta.env.VITE_WEBSOCKET_URL + `model/${batchId}/`);
+      const wsUrl = buildModelWsUrl(batchId);
+      if (!wsUrl) {
+        setIsLoading(false);
+        setError(wsErrorMessage);
+        throw new Error('WebSocket URL inválido.');
+      }
+      const socket = new WebSocket(wsUrl);
       console.log('Conectado ao WebSocket para o batchId:', batchId);
 
       // A Promise impede que o fluxo do componente continue até ter um resolve
       return new Promise((resolve) => {
+        let settled = false;
         socket.onmessage = function (event) {
           const data = JSON.parse(event.data);
           console.log('Mensagem recebida do WebSocket:', data);
@@ -81,6 +94,7 @@ export function useBatchValveDetection() {
           console.log(progressRef.current);
 
           if (allDone) {
+            settled = true;
             socket.close();
             setIsLoading(false);
             resolve(progressRef.current);
@@ -89,10 +103,15 @@ export function useBatchValveDetection() {
         socket.onerror = (error) => {
           socket.close();
           setIsLoading(false);
+          if (!settled) setError(wsErrorMessage);
           throw error;
         };
         socket.onclose = () => {
           console.log('Conexão WebSocket fechada.');
+          if (!settled) {
+            setIsLoading(false);
+            setError(wsErrorMessage);
+          }
         };
 
         sockets.current[batchId] = socket;
@@ -109,5 +128,5 @@ export function useBatchValveDetection() {
     setIsLoading(false);
   };
 
-  return { isLoading, progress, startDetection, cancelDetection };
+  return { isLoading, progress, error, startDetection, cancelDetection };
 }

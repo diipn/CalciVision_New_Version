@@ -120,181 +120,234 @@ def run_calcium_model(self: Task, data: dict):
 @shared_task(bind=True, max_retries=3, soft_time_limit=30, time_limit=60)
 def run_valve_model(self: Task, data: dict):
     logger.info('Valve Detection Analysis Starting')
-    
+
     channel_layer = get_channel_layer()
     app_config: ApiConfig = apps.get_app_config('api')
-    
+
     image_bytes = data['image_bytes']
     image_name = data.get('image_name')
     group_name = data.get('group_name')
     chain_context = data.get('chain_context')
-    
+
     is_chain = bool(chain_context)
-    
+
     if not group_name:
         group_name = f"task_{self.request.id}"
 
-    # FASE 1: Carregar modelo
-    if is_chain:
-        update_status(
-            self, 
-            channel_layer, 
-            group_name, 
-            status='PROGRESS', 
-            progress=int(100 * (chain_context['step']/chain_context['steps'])/2), 
-            phase='Performing valve position inference', 
-            image_name=image_name, 
-        )
-    else:
-        update_status(self, channel_layer, group_name, status='PROGRESS', progress=15, phase='Loading the model', image_name=image_name)
-    
-    yolo_model = app_config.yolo_model
+    logger.info(
+        "run_valve_model starting",
+        extra={"task_id": self.request.id, "group_name": group_name, "image_name": image_name},
+    )
 
-    # FASE 2: Pré-processamento aprimorado
-    if not is_chain:
-        update_status(self, channel_layer, group_name, status='PROGRESS', progress=25, phase='Preprocessing the echocardiography', image_name=image_name)
-    
-    def preprocess(image_bytes, image_size=640):
+    try:
+        update_status(self, channel_layer, group_name, status='PROGRESS', progress=0, phase='Starting valve detection', image_name=image_name)
 
-        img = Image.open(io.BytesIO(image_bytes))
-        orig_width, orig_height = img.size
-        
-        # Cálculo do scale factor
-        scale = min(image_size / orig_width, image_size / orig_height)
-        new_width, new_height = int(orig_width * scale), int(orig_height * scale)
-        
-        # Redimensionamento com mesma interpolação
-        img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-        
-        # Cálculo exato do padding
-        pad_x = (image_size - new_width) // 2
-        pad_y = (image_size - new_height) // 2
-        
-        # Cria imagem quadrada com bordas azuis
-        new_img = Image.new('RGB', (image_size, image_size), (29, 108, 219))
-        new_img.paste(img, (pad_x, pad_y))
-        
-        # Conversão para array numpy normalizado
-        img_array = np.array(new_img) / 255.0
-        img_array = img_array.transpose(2, 0, 1)  # HWC to CHW
-        img_array = np.expand_dims(img_array, axis=0).astype(np.float32)
-        
-        return {
-            'tensor': img_array,
-            'metadata': {
-                'original_size': (orig_width, orig_height),
-                'new_size': (new_width, new_height),
-                'scale': scale,
-                'padding': (pad_x, pad_y)
-            }
-        }
-
-    # Pré-processamento
-    preprocessed = preprocess(image_bytes)
-    img_array = preprocessed['tensor']
-    meta = preprocessed['metadata']
-
-    # Logs de Pré-Processamento
-    logger.info(f"""
-        Pré-processamento:
-        Original: {meta['original_size']}
-        Redimensionado: {meta['new_size']}
-        Scale: {meta['scale']}
-        Padding: {meta['padding']}
-    """)
-
-    # FASE 3: Inferência
-    if not is_chain:
-        update_status(self, channel_layer, group_name, status='PROGRESS', progress=40, phase='Performing valve position inference', image_name=image_name)
-    
-    outputs = yolo_model.run(None, {'images': img_array})[0]
-
-    # FASE 4: Pós-processamento
-    if not is_chain:
-        update_status(self, channel_layer, group_name, status='PROGRESS', progress=90, phase='Postprocessing the resulting image', image_name=image_name)
-    
-    def postprocess(predictions, meta):
-        if len(predictions) == 0:
-            return []
-
-        # Extrai as dimensões originais
-        orig_width, orig_height = meta['original_size']
-        scale = meta['scale']
-        pad_x, pad_y = meta['padding']
-
-        # Converte para formato [x_center, y_center, width, height, conf, class]
-        preds = predictions.copy()
-        preds[:, 0] = (preds[:, 0] - pad_x) / scale  # x_center
-        preds[:, 1] = (preds[:, 1] - pad_y) / scale  # y_center
-        preds[:, 2] = preds[:, 2] / scale            # width
-        preds[:, 3] = preds[:, 3] / scale            # height
-
-        # Converte para [x1, y1, x2, y2]
-        preds[:, 0] = preds[:, 0] - preds[:, 2] / 2  # x1
-        preds[:, 1] = preds[:, 1] - preds[:, 3] / 2  # y1
-        preds[:, 2] = preds[:, 0] + preds[:, 2]      # x2
-        preds[:, 3] = preds[:, 1] + preds[:, 3]      # y2
-
-        # Clip e filtro de confiança
-        preds = preds[preds[:, 4] > 0.25]
-        preds[:, [0, 2]] = np.clip(preds[:, [0, 2]], 0, orig_width)
-        preds[:, [1, 3]] = np.clip(preds[:, [1, 3]], 0, orig_height)
-
-        return preds
-
-    detections = postprocess(outputs[0], meta)
-    
-    # FASE 5: Formatação dos resultados
-    nparr = np.frombuffer(image_bytes, np.uint8)
-    original_image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    
-    if len(detections) > 0:
-        best_idx = np.argmax(detections[:, 4])
-        x1, y1, x2, y2, conf, cls = detections[best_idx]
-        
-        # Conversão para inteiros
-        x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
-        
-        # Desenho do bounding box (BGR)
-        output_image = original_image.copy()
-        cv2.rectangle(output_image, (x1, y1), (x2, y2), (219, 108, 29), 2)
-        
-        success, encoded_image = cv2.imencode('.png', output_image)
-        image_with_bbox = f"data:image/png;base64,{base64.b64encode(encoded_image.tobytes()).decode('utf-8')}"
-        
-        ws_results = {
-            'image_name': image_name,
-            'bbox': [float(x1), float(y1), float(x2), float(y2)],
-            'confidence': float(conf),
-            'class': int(cls),
-            'image_with_bbox': image_with_bbox,
-        }
-        
+        # FASE 1: Carregar modelo
         if is_chain:
-            chain_results = {
-                'image_bytes': image_bytes,
-                'bbox': { 'x1': float(x1), 'y1': float(y1), 'x2': float(x2), 'y2': float(y2) },
-                'image_name': image_name,
-                'group_name': group_name,
-                'chain_context': { 'step': 2, 'steps': chain_context['steps'] }
+            update_status(
+                self,
+                channel_layer,
+                group_name,
+                status='PROGRESS',
+                progress=int(100 * (chain_context['step']/chain_context['steps'])/2),
+                phase='Performing valve position inference',
+                image_name=image_name,
+            )
+        else:
+            update_status(self, channel_layer, group_name, status='PROGRESS', progress=15, phase='Loading the model', image_name=image_name)
+
+        yolo_model = app_config.yolo_model
+        update_status(self, channel_layer, group_name, status='PROGRESS', progress=20, phase='Model loaded', image_name=image_name)
+
+        # FASE 2: Pré-processamento aprimorado
+        if not is_chain:
+            update_status(self, channel_layer, group_name, status='PROGRESS', progress=25, phase='Preprocessing the echocardiography', image_name=image_name)
+
+        def preprocess(image_bytes, image_size=640):
+            img = Image.open(io.BytesIO(image_bytes))
+            orig_width, orig_height = img.size
+
+            # Cálculo do scale factor
+            scale = min(image_size / orig_width, image_size / orig_height)
+            new_width, new_height = int(orig_width * scale), int(orig_height * scale)
+
+            # Redimensionamento com mesma interpolação
+            img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+            # Cálculo exato do padding
+            pad_x = (image_size - new_width) // 2
+            pad_y = (image_size - new_height) // 2
+
+            # Cria imagem quadrada com bordas azuis
+            new_img = Image.new('RGB', (image_size, image_size), (29, 108, 219))
+            new_img.paste(img, (pad_x, pad_y))
+
+            # Conversão para array numpy normalizado
+            img_array = np.array(new_img) / 255.0
+            img_array = img_array.transpose(2, 0, 1)  # HWC to CHW
+            img_array = np.expand_dims(img_array, axis=0).astype(np.float32)
+
+            return {
+                'tensor': img_array,
+                'metadata': {
+                    'original_size': (orig_width, orig_height),
+                    'new_size': (new_width, new_height),
+                    'scale': scale,
+                    'padding': (pad_x, pad_y)
+                }
             }
 
-    if is_chain:
-        update_status(
-            self, 
-            channel_layer, 
-            group_name, 
-            status='PROGRESS', 
-            progress=int(100 * (chain_context['step']/chain_context['steps'])), 
-            phase='Performing valve position inference', 
-            image_name=image_name, 
-            results=ws_results
-        )
-    else:
-        update_status(self, channel_layer, group_name, status='SUCCESS', progress=100, phase='Aortic valve detection completed', image_name=image_name, results=ws_results)
+        # Pré-processamento
+        preprocessed = preprocess(image_bytes)
+        img_array = preprocessed['tensor']
+        meta = preprocessed['metadata']
 
-    # Se a task estiver integrada numa chain, retorna os resultados para a próxima task, caso contrário retorna os resultados finais para o frontend
-    return chain_results if is_chain else ws_results
+        # Logs de Pré-Processamento
+        logger.info(f"""
+            Pré-processamento:
+            Original: {meta['original_size']}
+            Redimensionado: {meta['new_size']}
+            Scale: {meta['scale']}
+            Padding: {meta['padding']}
+        """)
+
+        # FASE 3: Inferência
+        if not is_chain:
+            update_status(self, channel_layer, group_name, status='PROGRESS', progress=40, phase='Performing valve position inference', image_name=image_name)
+
+        outputs = yolo_model.run(None, {'images': img_array})[0]
+
+        # FASE 4: Pós-processamento
+        if not is_chain:
+            update_status(self, channel_layer, group_name, status='PROGRESS', progress=90, phase='Postprocessing the resulting image', image_name=image_name)
+
+        def postprocess(predictions, meta):
+            if len(predictions) == 0:
+                return []
+
+            # Extrai as dimensões originais
+            orig_width, orig_height = meta['original_size']
+            scale = meta['scale']
+            pad_x, pad_y = meta['padding']
+
+            # Converte para formato [x_center, y_center, width, height, conf, class]
+            preds = predictions.copy()
+            preds[:, 0] = (preds[:, 0] - pad_x) / scale  # x_center
+            preds[:, 1] = (preds[:, 1] - pad_y) / scale  # y_center
+            preds[:, 2] = preds[:, 2] / scale            # width
+            preds[:, 3] = preds[:, 3] / scale            # height
+
+            # Converte para [x1, y1, x2, y2]
+            preds[:, 0] = preds[:, 0] - preds[:, 2] / 2  # x1
+            preds[:, 1] = preds[:, 1] - preds[:, 3] / 2  # y1
+            preds[:, 2] = preds[:, 0] + preds[:, 2]      # x2
+            preds[:, 3] = preds[:, 1] + preds[:, 3]      # y2
+
+            # Clip e filtro de confiança
+            preds = preds[preds[:, 4] > 0.25]
+            preds[:, [0, 2]] = np.clip(preds[:, [0, 2]], 0, orig_width)
+            preds[:, [1, 3]] = np.clip(preds[:, [1, 3]], 0, orig_height)
+
+            return preds
+
+        detections = postprocess(outputs[0], meta)
+
+        # FASE 5: Formatação dos resultados
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        original_image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+        ws_results = None
+        chain_results = None
+
+        if len(detections) > 0:
+            best_idx = np.argmax(detections[:, 4])
+            x1, y1, x2, y2, conf, cls = detections[best_idx]
+
+            # Conversão para inteiros
+            x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
+
+            # Desenho do bounding box (BGR)
+            output_image = original_image.copy()
+            cv2.rectangle(output_image, (x1, y1), (x2, y2), (219, 108, 29), 2)
+
+            success, encoded_image = cv2.imencode('.png', output_image)
+            image_with_bbox = f"data:image/png;base64,{base64.b64encode(encoded_image.tobytes()).decode('utf-8')}"
+
+            ws_results = {
+                'image_name': image_name,
+                'bbox': [float(x1), float(y1), float(x2), float(y2)],
+                'confidence': float(conf),
+                'class': int(cls),
+                'image_with_bbox': image_with_bbox,
+            }
+
+            if is_chain:
+                chain_results = {
+                    'image_bytes': image_bytes,
+                    'bbox': { 'x1': float(x1), 'y1': float(y1), 'x2': float(x2), 'y2': float(y2) },
+                    'image_name': image_name,
+                    'group_name': group_name,
+                    'chain_context': { 'step': 2, 'steps': chain_context['steps'] }
+                }
+        else:
+            ws_results = {
+                'image_name': image_name,
+                'bbox': None,
+                'confidence': None,
+                'class': None,
+                'image_with_bbox': None,
+            }
+
+        update_status(self, channel_layer, group_name, status='PROGRESS', progress=95, phase='Prediction ready', image_name=image_name)
+
+        if is_chain:
+            update_status(
+                self,
+                channel_layer,
+                group_name,
+                status='PROGRESS',
+                progress=int(100 * (chain_context['step']/chain_context['steps'])),
+                phase='Performing valve position inference',
+                image_name=image_name,
+                results=ws_results
+            )
+        else:
+            update_status(self, channel_layer, group_name, status='SUCCESS', progress=100, phase='Aortic valve detection completed', image_name=image_name, results=ws_results)
+
+        logger.info(
+            "run_valve_model completed",
+            extra={"task_id": self.request.id, "group_name": group_name, "image_name": image_name},
+        )
+
+        # Se a task estiver integrada numa chain, retorna os resultados para a próxima task, caso contrário retorna os resultados finais para o frontend
+        return chain_results if is_chain else ws_results
+    except Exception as exc:
+        logger.exception("run_valve_model failed")
+        set_screening_progress(
+            group_name,
+            {
+                "status": "error",
+                "progress": 100,
+                "phase": "Valve detection failed",
+                "error": str(exc),
+                "image_name": image_name,
+                "status_detail": "FAILURE",
+            },
+        )
+        async_to_sync(channel_layer.group_send)(
+            group_name,
+            {
+                "type": "send.update",
+                "data": {
+                    "status": "FAILURE",
+                    "progress": 100,
+                    "phase": "Valve detection failed",
+                    "error": str(exc),
+                    "image_name": image_name,
+                },
+            },
+        )
+        raise
 
 @shared_task(bind=True)
 def save_frame_from_patient_screening(self: Task, frame_results: dict, context: dict):
@@ -523,9 +576,17 @@ def update_status(task: Task, channel_layer, group_name, status, progress, phase
     if image_name is not None:
         data.update({ 'image_name': image_name })
 
+    def _map_status(raw_status: str) -> str:
+        if raw_status in ("SUCCESS",):
+            return "done"
+        if raw_status in ("FAILURE", "REVOKED"):
+            return "error"
+        return "running"
+
     # Guarda em memória no Redis
     set_screening_progress(group_name, {
-        'status': status,
+        'status': _map_status(status),
+        'status_detail': status,
         'progress': progress,
         'phase': phase,
         'results': results,

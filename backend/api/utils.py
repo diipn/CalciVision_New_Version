@@ -13,6 +13,17 @@ from io import BytesIO
 import cv2
 
 
+def _normalize_task_id(task_id: str) -> str:
+    if not task_id:
+        return "task_unknown"
+    return task_id if task_id.startswith("task_") else f"task_{task_id}"
+
+
+def get_screening_progress_key(task_id: str) -> str:
+    normalized = _normalize_task_id(task_id)
+    return f"screening_progress:{normalized}"
+
+
 def set_screening_progress(task_id: str, data: dict) -> None:
     """
     Salva o progresso atual de uma task de screening no Redis.
@@ -21,11 +32,11 @@ def set_screening_progress(task_id: str, data: dict) -> None:
         task_id (str): Identificador único do grupo da task (formato 'task_<uuid>').
         data (dict): Dicionário com o progresso, status, resultados parciais, etc.
 
-    O progresso é salvo na chave 'screening_progress:{task_id}' e pode ser recuperado
+    O progresso é salvo na chave 'screening_progress:task_<uuid>' e pode ser recuperado
     por outros processos (ex: views, consumers) para fornecer feedback imediato ao frontend.
     """
     r = redis.Redis.from_url(settings.REDIS_URL)
-    r.set(f"screening_progress:{task_id}", json.dumps(data))
+    r.set(get_screening_progress_key(task_id), json.dumps(data))
 
 
 def frame_image_upload_path(instance, filename: str):

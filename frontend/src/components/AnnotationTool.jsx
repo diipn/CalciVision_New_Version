@@ -37,13 +37,13 @@ const AnnotationTool = forwardRef(function AnnotationTool({ frames, currentFrame
     const zoom = imageSettings?.zoom ?? 1;
 
     // Um hook personalizado para iniciar a identificação da válvula de UMA ÚNICA imagem
-    const { progress: valveProgress, isLoading: isLoadingValve, startDetection: startSingleDetection, cancelDetection: cancelSingleDetection } = useValveDetection();
+    const { progress: valveProgress, isLoading: isLoadingValve, error: valveWsError, startDetection: startSingleDetection, cancelDetection: cancelSingleDetection, retryDetection: retryValveDetection, slowDetectionMessage } = useValveDetection();
     
     // Um hook personalizado para iniciar a medição da calcificação de UMA ÚNICA imagem
-    const { progress: calciumProgress, isLoading: isLoadingCalcium, startDetection: startCalciumDetection } = useCalciumDetection();
+    const { progress: calciumProgress, isLoading: isLoadingCalcium, error: calciumWsError, startDetection: startCalciumDetection } = useCalciumDetection();
 
     // Um hook personalizado para iniciar a identificação da válvula de MÚLTIPLAS imagens em batch de forma eficiente
-    const { progress: batchProgress, isLoading: isLoadingBatch, startDetection: startBatchDetection } = useBatchValveDetection();
+    const { progress: batchProgress, isLoading: isLoadingBatch, error: batchWsError, startDetection: startBatchDetection } = useBatchValveDetection();
 
     const { setUnsavedChanges } = useUnsavedStore();
 
@@ -726,6 +726,21 @@ const AnnotationTool = forwardRef(function AnnotationTool({ frames, currentFrame
                             Cancelar
                         </button>
                         <div className='absolute inset-0 bg-green-400/10 backdrop-blur-xs' />
+                    </div>
+                )}
+
+                {/* Erro de ligação ao WS */}
+                {(valveWsError || calciumWsError || batchWsError) && (
+                    <div className='absolute top-4 left-1/2 -translate-x-1/2 z-10 bg-red-500 text-white px-4 py-2 rounded-md text-sm shadow flex items-center gap-3'>
+                        <span>{valveWsError || calciumWsError || batchWsError}</span>
+                        {valveWsError === slowDetectionMessage && (
+                            <button
+                                className='bg-white text-red-600 px-3 py-1 rounded-sm text-xs font-semibold'
+                                onClick={() => retryValveDetection?.()}
+                            >
+                                Tentar novamente
+                            </button>
+                        )}
                     </div>
                 )}
 

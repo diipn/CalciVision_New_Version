@@ -1,9 +1,6 @@
-import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useUser } from '../contexts/UserContext'
 import avatar from "@assets/img/doctorImage.png";
-import notificationIcon from "@assets/icons/notification.svg";
-import magnifyingGlassIcon from "@assets/icons/magnifying_glass.svg";
 
 export default function Header() {
   
@@ -42,40 +39,9 @@ export default function Header() {
               {user && user.medical_speciality || 'Doctor'}
             </small>
           </div>
-          <div className='group grid place-items-center aspect-square mr-12 border-[1px] rounded-full border-gray-medium-dark cursor-pointer' role='button'>
-            <img 
-              src={notificationIcon}
-              alt="Notifications"
-              role='icon'
-              className='transition duration-400 ease-out group-hover:scale-110'
-            />
-          </div>
-          <SearchButton />
         </div>
       </div>
     </header>
   );
 }
 
-function SearchButton() {
-  
-    const [focused, setFocused] = useState(false);
-  
-    return (
-      <div className={`w-68 mr-4 flex items-center rounded-full outline-1 bg-white transition-all duration-200 ${focused ? 'outline-green outline-2': 'outline-gray-medium-dark'}`}>
-        <button className='aspect-square h-full grid place-items-center bg-transparent cursor-pointer'>
-          <img src={magnifyingGlassIcon} alt="Search" role="icon" />
-        </button>
-        <input 
-          id='search-input'
-          type='search'
-          autoComplete='on'
-          role='input'
-          placeholder='Search'
-          className='h-full grow p-1 pr-3 outline-none'
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-        />
-      </div>
-    );
-  }

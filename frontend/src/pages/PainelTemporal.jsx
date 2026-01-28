@@ -344,7 +344,7 @@ export default function PainelTemporal() {
           <div className="rounded-2xl bg-white border border-gray-200 p-4">
             <p className="text-sm text-gray-medium">Maior progressão</p>
             <p className="mt-1 text-2xl font-semibold text-gray-dark">{summary.topName}</p>
-            <p className="mt-2 text-sm text-gray-medium">Doente com a taxa mais elevada no período seleccionado.</p>
+            <p className="mt-2 text-sm text-gray-medium">Doente com a taxa mais elevada no período selecionado.</p>
           </div>
 
           <div className="rounded-2xl bg-white border border-gray-200 p-4">
@@ -539,13 +539,7 @@ export default function PainelTemporal() {
               </tbody>
             </table>
           </div>
-        </div>
-
-        {/* Footer note */}
-        <div className="mt-6 text-sm text-gray-medium">
-          Nota: este painel é um protótipo visual. As taxas, alertas e tendência são calculados com regras simples apenas para
-          simular o comportamento futuro.
-        </div>
+        </div>        
       </div>
     </MainLayout>
   );

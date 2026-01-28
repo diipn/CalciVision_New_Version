@@ -11,24 +11,20 @@ const formatDateLabel = (date = new Date()) => {
   });
 };
 
-const readFilesAsDataUrls = (files) => {
-  const readers = files.map(
-    (file) =>
-      new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = () => reject(reader.error);
-        reader.readAsDataURL(file);
-      })
-  );
-  return Promise.all(readers);
+const MAX_FILE_SIZE_MB = 25;
+
+const isValidDicomFile = (file) => {
+  if (!file) return false;
+  if (file.type === "application/dicom") return true;
+  if (file.type?.startsWith("image/")) return true;
+  return file.name?.toLowerCase().endsWith(".dcm");
 };
 
 export default function ManualAnnotationSetup() {
   const [patients, setPatients] = useState([]);
   const [selectedPatientId, setSelectedPatientId] = useState("");
   const [selectedEchoId, setSelectedEchoId] = useState("");
-  const [echoMode, setEchoMode] = useState("existing");
+  const [echoMode, setEchoMode] = useState("upload");
   const [uploading, setUploading] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [uploadCount, setUploadCount] = useState(0);
@@ -52,7 +48,16 @@ export default function ManualAnnotationSetup() {
   const handlePatientChange = (value) => {
     setSelectedPatientId(value);
     setSelectedEchoId("");
-    setEchoMode("existing");
+    setEchoMode("upload");
+    setUploadedFiles([]);
+    setUploadCount(0);
+    setUploadError("");
+  };
+
+  const handleEchoModeChange = (mode) => {
+    if (mode === echoMode) return;
+    setEchoMode(mode);
+    setSelectedEchoId("");
     setUploadedFiles([]);
     setUploadCount(0);
     setUploadError("");
@@ -60,33 +65,48 @@ export default function ManualAnnotationSetup() {
 
   const handleUpload = async (event) => {
     const files = Array.from(event.target.files || []);
-    if (!files.length || !selectedPatientId) return;
+    if (!selectedPatientId) {
+      setUploadError("Seleccione um doente antes de carregar o ecocardiograma.");
+      return;
+    }
+    if (!files.length) {
+      setUploadError("Seleccione pelo menos um ficheiro DICOM.");
+      return;
+    }
+    const invalidFiles = files.filter((file) => !isValidDicomFile(file));
+    if (invalidFiles.length) {
+      setUploadError("Formato inválido. Carregue apenas ficheiros DICOM ou imagens suportadas.");
+      return;
+    }
+    const oversizedFiles = files.filter((file) => file.size / 1024 / 1024 > MAX_FILE_SIZE_MB);
+    if (oversizedFiles.length) {
+      setUploadError(`Cada ficheiro deve ter no máximo ${MAX_FILE_SIZE_MB} MB.`);
+      return;
+    }
     setUploading(true);
     setUploadError("");
     try {
-      const frames = await readFilesAsDataUrls(files);
       const description = `ECO TEE (${formatDateLabel()})`;
-      const newExam = await createExamWithFrames(selectedPatientId, description, frames);
+      const newExam = await createExamWithFrames(selectedPatientId, description, files);
       setUploadedFiles(files);
       setUploadCount(files.length);
       setSelectedEchoId(newExam.id);
-      setEchoMode("upload");
     } catch (error) {
       console.error(error);
-      setUploadError("Não foi possível carregar os ficheiros. Tente novamente.");
+      setUploadError("Erro ao carregar o ecocardiograma. Tente novamente.");
     } finally {
       setUploading(false);
     }
   };
 
-  const canProceed = Boolean(selectedPatientId && selectedEchoId);
+  const canProceed = Boolean(selectedPatientId && selectedEchoId && !uploading);
 
   return (
     <MainLayout pageTitle="Iniciar análise - CalciVision">
-      <div className="max-w-3xl space-y-6">
+      <div className="max-w-2xl space-y-6">
         <header className="space-y-2">
           <h3 className="text-xl font-semibold">Iniciar análise</h3>
-          <p className="text-gray-600">Selecione o doente e o ecocardiograma a analisar.</p>
+          <p className="text-gray-600">Seleccione o doente e o ecocardiograma a analisar.</p>
         </header>
 
         <div className="space-y-4">
@@ -94,11 +114,11 @@ export default function ManualAnnotationSetup() {
             <span className="text-sm font-semibold text-gray-700">Doente</span>
             <select
               name="patient"
-              className="px-4 py-2 border-2 border-green-dark rounded-md bg-white"
+              className="w-full max-w-lg px-4 py-2 border-2 border-green-dark rounded-md bg-white"
               onChange={(event) => handlePatientChange(event.target.value)}
               value={selectedPatientId}
             >
-              <option value="">--- Selecionar doente ---</option>
+              <option value="">--- Seleccionar doente ---</option>
               {patients.map((patient) => (
                 <option key={patient.id} value={patient.id}>
                   {patient.name}
@@ -112,26 +132,26 @@ export default function ManualAnnotationSetup() {
               <button
                 type="button"
                 className={`rounded-md px-3 py-2 text-sm font-semibold ${
-                  echoMode === "existing"
-                    ? "border border-green-dark bg-green-dark text-white"
-                    : "border border-green-pale text-green-dark"
-                }`}
-                onClick={() => setEchoMode("existing")}
-                disabled={!selectedPatientId}
-              >
-                Usar ecocardiograma existente
-              </button>
-              <button
-                type="button"
-                className={`rounded-md px-3 py-2 text-sm font-semibold ${
                   echoMode === "upload"
                     ? "border border-green-dark bg-green-dark text-white"
                     : "border border-green-pale text-green-dark"
                 }`}
-                onClick={() => setEchoMode("upload")}
+                onClick={() => handleEchoModeChange("upload")}
                 disabled={!selectedPatientId}
               >
                 Carregar novo ecocardiograma
+              </button>
+              <button
+                type="button"
+                className={`rounded-md px-3 py-2 text-sm font-semibold ${
+                  echoMode === "existing"
+                    ? "border border-green-dark bg-green-dark text-white"
+                    : "border border-green-pale text-green-dark"
+                }`}
+                onClick={() => handleEchoModeChange("existing")}
+                disabled={!selectedPatientId}
+              >
+                Usar ecocardiograma existente
               </button>
             </div>
 
@@ -141,12 +161,12 @@ export default function ManualAnnotationSetup() {
                   <span className="text-sm font-semibold text-gray-700">Ecocardiograma</span>
                   <select
                     name="echocardiogram"
-                    className="px-4 py-2 border-2 border-green-dark rounded-md bg-white"
+                    className="w-full max-w-lg px-4 py-2 border-2 border-green-dark rounded-md bg-white"
                     onChange={(event) => setSelectedEchoId(event.target.value)}
                     value={selectedEchoId}
                     disabled={!selectedPatientId}
                   >
-                    <option value="">--- Selecionar ecocardiograma ---</option>
+                    <option value="">--- Seleccionar ecocardiograma ---</option>
                     {selectedPatient?.echocardiograms?.map((echo) => (
                       <option key={echo.id} value={echo.id}>
                         {echo.description || `Ecocardiograma ${echo.id}`}
@@ -160,8 +180,10 @@ export default function ManualAnnotationSetup() {
             {echoMode === "upload" && (
               <div className="mt-4 space-y-3">
                 <label className="inline-flex items-center gap-3">
-                  <span className="rounded-md bg-green-dark px-4 py-2 text-sm font-semibold text-white">
-                    Carregar ficheiros DICOM
+                  <span className={`rounded-md px-4 py-2 text-sm font-semibold text-white ${
+                    selectedPatientId ? "bg-green-dark" : "bg-gray-medium"
+                  }`}>
+                    Carregar ecocardiograma
                   </span>
                   <input
                     type="file"
@@ -172,11 +194,14 @@ export default function ManualAnnotationSetup() {
                     disabled={!selectedPatientId || uploading}
                   />
                 </label>
+                {!selectedPatientId && (
+                  <p className="text-sm text-gray-600">Seleccione um doente para activar o carregamento.</p>
+                )}
                 {uploading && <p className="text-sm text-gray-600">A carregar ficheiros...</p>}
                 {uploadError && <p className="text-sm text-red">{uploadError}</p>}
                 {uploadCount > 0 && (
-                  <div className="rounded-md bg-white p-3 text-sm text-gray-700">
-                    <p className="font-semibold">{uploadCount} ficheiros carregados</p>
+                  <div className="rounded-md bg-white p-3 text-sm text-gray-700 max-w-lg">
+                    <p className="font-semibold">{uploadCount} ficheiro(s) carregado(s)</p>
                     <ul className="mt-2 list-disc pl-5 text-xs">
                       {uploadedFiles.map((file) => (
                         <li key={file.name}>{file.name}</li>

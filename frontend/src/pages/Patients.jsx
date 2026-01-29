@@ -18,6 +18,32 @@ const getRiskLabel = (vo) => {
   return 'Alto';
 };
 
+const getLocalVoOverride = (echoId) => {
+  if (!echoId) return null;
+  if (typeof window === 'undefined' || !window.localStorage) return null;
+  try {
+    const raw = localStorage.getItem(`exam-settings-${echoId}`);
+    if (!raw) return null;
+    const settings = JSON.parse(raw);
+    if (!settings?.voOverrideEnabled) return null;
+    const value = Number(settings.voOverrideValue);
+    if (!Number.isFinite(value)) return null;
+    return value > 1 ? value / 100 : value;
+  } catch {
+    return null;
+  }
+};
+
+const applyLocalVoOverrides = (patients) =>
+  (patients || []).map((patient) => ({
+    ...patient,
+    echocardiograms: (patient.echocardiograms || []).map((echo) => {
+      const overrideVo = getLocalVoOverride(echo?.id);
+      if (overrideVo === null || overrideVo === undefined) return echo;
+      return { ...echo, vo: overrideVo };
+    }),
+  }));
+
 export default function Patients() {
 
   const [patients, setPatients] = useState([]);
@@ -38,8 +64,9 @@ export default function Patients() {
   const fetchPatients = async () => {
     try {
       const data = await getPatients();
-      setPatients(data);
-      setFilteredPatients(data);
+      const hydrated = applyLocalVoOverrides(data);
+      setPatients(hydrated);
+      setFilteredPatients(hydrated);
     } catch (error) {
       console.error(error);
     } finally {

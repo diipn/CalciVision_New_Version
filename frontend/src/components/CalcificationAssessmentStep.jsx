@@ -14,6 +14,7 @@ export default function CalcificationAssessmentStep({
   onValidate,
   onEditValidation,
   showManualBadge,
+  onAutoQuantify,
 }) {
   const [showInfo, setShowInfo] = useState(false);
 
@@ -78,6 +79,19 @@ export default function CalcificationAssessmentStep({
         )}
 
         <div className="mt-4 space-y-2">
+          <button
+            type="button"
+            onClick={onAutoQuantify}
+            disabled={!voEditable}
+            className={`w-full rounded-md border px-3 py-2 text-sm font-semibold ${
+              voEditable
+                ? "border-green-dark text-green-dark hover:bg-green-50"
+                : "border-gray-300 text-gray-400 cursor-not-allowed"
+            }`}
+          >
+            Quantificar automaticamente
+          </button>
+
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -86,18 +100,20 @@ export default function CalcificationAssessmentStep({
             />
             Ajustar VO manualmente
           </label>
+
           {isVoOverrideActive && (
             <input
               type="number"
               min={0}
               max={100}
-              value={voOverrideValue}
+              value={voOverrideValue ?? 0}
               onChange={(event) => onVoOverrideChange(event.target.value)}
               className="w-full rounded-md border border-green-pale px-3 py-2 text-sm"
               aria-label="Valor da VO manual"
               disabled={!voEditable}
             />
           )}
+
           {!voEditable && (
             <p className="text-xs text-gray-500">A avaliação está validada. Para editar, altere a validação.</p>
           )}

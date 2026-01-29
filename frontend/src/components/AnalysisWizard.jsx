@@ -64,7 +64,8 @@ export default function AnalysisWizard({
   const [reportText, setReportText] = useState("");
   const [clinicalNotes, setClinicalNotes] = useState("");
   const [voOverrideEnabled, setVoOverrideEnabled] = useState(false);
-  const [voOverrideValue, setVoOverrideValue] = useState(0);
+  const [voOverrideValue, setVoOverrideValue] = useState(null);
+  const [voManualUiEnabled, setVoManualUiEnabled] = useState(false);
   const [annotationStatusMessage, setAnnotationStatusMessage] = useState("");
   const [manualActionActive, setManualActionActive] = useState(false);
   const [aiActionActive, setAiActionActive] = useState(false);
@@ -186,10 +187,11 @@ export default function AnalysisWizard({
   }, [echoId, currentStep, rects, calcification, reportText]);
 
   useEffect(() => {
-    if (voBase !== null && !voOverrideEnabled) {
+    if (voBase !== null && !voOverrideEnabled && voOverrideValue === null) {
       setVoOverrideValue(Math.round(voBase));
     }
-  }, [voBase, voOverrideEnabled]);
+  }, [voBase, voOverrideEnabled, voOverrideValue]);
+
 
   useEffect(() => {
     if (classificationChoice !== null) {
@@ -332,6 +334,32 @@ export default function AnalysisWizard({
     asPdf.updateContainer(doc);
     return asPdf.toBlob();
   };
+
+  const handleAutoQuantifyVO = async () => {
+  if (isValidated) return;
+
+  const randomValue = Math.floor(Math.random() * 101); // 0–100
+
+  // VO efectiva deve mudar -> override tem de ficar ON
+  setVoOverrideEnabled(true);
+  setVoOverrideValue(randomValue);
+
+  // mas NÃO queremos abrir modo manual / checkbox marcada
+  setVoManualUiEnabled(false);
+
+  setUnsavedChanges(true);
+  addToast(`VO quantificada automaticamente: ${randomValue}/100`, "success");
+
+  try {
+    await updateExamSettings(echoId, {
+      voOverrideEnabled: true,      // ✅ igual ao state
+      voOverrideValue: randomValue,
+    });
+  } catch (error) {
+    console.error("Erro ao guardar VO automática:", error);
+    addToast("Não foi possível guardar a VO automática.", "error");
+  }
+};
 
   const handleExportPdf = async () => {
     if (!reportText) return;
@@ -580,7 +608,11 @@ export default function AnalysisWizard({
               voEditable={!isValidated}
               voOverrideValue={voOverrideValue}
               onToggleVoOverride={(checked) => {
-                setVoOverrideEnabled(checked);
+                setVoManualUiEnabled(checked);
+                // Se o user activar o manual, garantimos que está a usar override
+                if (checked) {
+                  setVoOverrideEnabled(true);
+                }
                 setUnsavedChanges(true);
               }}
               onVoOverrideChange={(value) => {
@@ -593,7 +625,7 @@ export default function AnalysisWizard({
                 setVoOverrideValue(numeric);
                 setUnsavedChanges(true);
               }}
-              isVoOverrideActive={voOverrideEnabled}
+              isVoOverrideActive={voManualUiEnabled}
               classificationChoice={classificationChoice}
               onClassificationChange={(value) => {
                 setClassificationChoice(value);
@@ -603,7 +635,8 @@ export default function AnalysisWizard({
               isValidated={isValidated}
               onValidate={handleValidateAssessment}
               onEditValidation={handleEditValidation}
-              showManualBadge={voOverrideEnabled}
+              showManualBadge={voManualUiEnabled}
+              onAutoQuantify={handleAutoQuantifyVO}
             />
           )}
 

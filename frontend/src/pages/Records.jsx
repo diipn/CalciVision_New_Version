@@ -4,6 +4,7 @@ import { getReports, getPatients, getEchoResults, deleteReport } from "../api";
 import magnifyingGlassIcon from "@assets/icons/magnifying_glass.svg";
 import pdfIcon from "../assets/img/pdf_icon.png";
 import ReportDropdown from "../components/ReportDropdown";
+import { getPatientAge } from "../utils/patientAge";
 
 const Records = () => {
   const [patients, setPatients] = useState([]);
@@ -114,7 +115,7 @@ const Records = () => {
                   </td>
                   <td className="text-sm p-3 text-left">{report.patient}</td>
                   <td className="text-sm p-3 text-left">{reportPatient.name || '—'}</td>
-                  <td className="text-sm p-3 text-left">{reportPatient.age || "N/A"}</td>
+                  <td className="text-sm p-3 text-left">{getPatientAge(reportPatient) ?? "N/A"}</td>
                   <td className="p-3 text-center">
                     <div className={`w-full py-3 rounded-lg text-sm ${report.hasCalcification ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"}`}>
                       {report.hasCalcification ? "Calcified" : "Not calcified"}

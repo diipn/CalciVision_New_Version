@@ -56,9 +56,11 @@ export const deleteReport = async (reportId) => {
   }
 };
 
-export const getEchoResults = async (patientId) => {
+export const getEchoResults = async (patientId, echoId) => {
   try {
-    const response = await api.get(`/api/patient/${patientId}/echodata/`);
+    const response = await api.get(`/api/patient/${patientId}/echodata/`, {
+      params: echoId ? { echo_id: echoId } : undefined,
+    });
     return response.data;
   } catch (error) {
     console.error("Error fetching echo results:", error);
@@ -122,6 +124,14 @@ export const updateExamSettings = async (examId, updates) => {
   };
   localStorage.setItem(`exam-settings-${examId}`, JSON.stringify(next));
   return next;
+};
+
+export const quantifyObjectiveVariable = async (patientId, echoId, results) => {
+  const response = await api.post(
+    `/api/patient/${patientId}/echocardiogram/${echoId}/objective-variable/`,
+    { results }
+  );
+  return response.data;
 };
 
 export default api;

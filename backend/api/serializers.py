@@ -7,7 +7,19 @@ from django.http import HttpRequest
 class EchocardiogramSerializer(serializers.ModelSerializer):
     class Meta:
         model = Echocardiogram
-        fields = ['id', 'patient', 'uploaded_at', 'description', 'status']
+        fields = [
+            'id',
+            'patient',
+            'uploaded_at',
+            'description',
+            'status',
+            'vo',
+            'vo_frame_count',
+            'vo_white_pixels',
+            'vo_gray_pixels',
+            'vo_roi_pixels',
+            'vo_metadata',
+        ]
 
 class ReportPdfSerializer(serializers.ModelSerializer):
     doctor = UserSerializer(read_only=True)
@@ -48,7 +60,22 @@ class EcoFrameDataSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = EchoFrameData
-        fields = ['doctor', 'frame', 'x', 'y', 'width', 'height', 'is_calcified', 'confidence', 'is_annotation_generated', 'is_calcification_generated']
+        fields = [
+            'doctor',
+            'frame',
+            'x',
+            'y',
+            'width',
+            'height',
+            'is_calcified',
+            'confidence',
+            'is_annotation_generated',
+            'is_calcification_generated',
+            'objective_variable',
+            'white_pixel_count',
+            'gray_pixel_count',
+            'valid_pixel_count',
+        ]
 
 class EcoFrameSerializer(serializers.ModelSerializer):
     data = EcoFrameDataSerializer(many=True, read_only=True)
@@ -84,7 +111,16 @@ class EchoFrameDataSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = EchoFrameData
-        fields = ['frame', 'rects', 'is_calcified', 'confidence']
+        fields = [
+            'frame',
+            'rects',
+            'is_calcified',
+            'confidence',
+            'objective_variable',
+            'white_pixel_count',
+            'gray_pixel_count',
+            'valid_pixel_count',
+        ]
 
     def get_rects(self, obj):
         # Retorna as coordenadas como um objeto

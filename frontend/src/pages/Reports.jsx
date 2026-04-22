@@ -4,6 +4,7 @@ import MainLayout from "../layouts/MainLayout.jsx";
 import ReportPDF from '../components/ReportPDF.jsx';
 import { useUser } from '../contexts/UserContext';
 import { pdf } from '@react-pdf/renderer';
+import { getPatientAge } from "../utils/patientAge";
 
 const Reports = () => {
     const [selectedPatientId, setSelectedPatientId] = useState(null);
@@ -95,7 +96,7 @@ const Reports = () => {
                                                 />
                                             </td>
                                             <td className="p-3 text-left">{patient.name}</td>
-                                            <td className="align-middle text-left p-2">{patient.age}</td>
+                                            <td className="align-middle text-left p-2">{getPatientAge(patient) ?? "N/D"}</td>
                                             <td className="align-middle text-left p-2">{patient.email}</td>
                                             <td className="px-35  ">
                                                 <div className={`w-28 py-[4px] text-sm text-white text-center rounded-md bg-green-600`}>

@@ -1,4 +1,5 @@
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
+import { getPatientAge } from '../utils/patientAge';
 
 const styles = StyleSheet.create({
   page: { 
@@ -165,6 +166,7 @@ const ReportPDF = ({ data, patient, medico, reportText }) => {
   const calcifiedFrames = data.filter(item => item.is_calcified).length;
   const totalFrames = data.length;
   const calcificationPercentage = totalFrames > 0 ? ((calcifiedFrames / totalFrames) * 100).toFixed(1) : 0;
+  const patientAge = getPatientAge(patient);
   const currentDate = new Date().toLocaleDateString('en-US', { 
     day: '2-digit', 
     month: '2-digit', 
@@ -199,7 +201,7 @@ const ReportPDF = ({ data, patient, medico, reportText }) => {
         </View>
         <View style={styles.patientRow}>
           <Text style={styles.patientLabel}>Age:</Text>
-          <Text style={styles.patientValue}>{patient.age} years</Text>
+          <Text style={styles.patientValue}>{patientAge !== null ? `${patientAge} years` : 'N/A'}</Text>
         </View>
         <View style={styles.patientRow}>
           <Text style={styles.patientLabel}>Exam Date:</Text>

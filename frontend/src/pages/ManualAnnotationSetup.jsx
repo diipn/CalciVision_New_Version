@@ -80,22 +80,11 @@ export default function ManualAnnotationSetup() {
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
 
-    if (uploadSuccess) {
-      setSelectedEchoId("");
-      setUploadSuccess(false);
-      setUploadCount(0);
-    }
-
-    const nextFiles = uploadSuccess ? files : [...selectedFiles, ...files];
-    setSelectedFiles(nextFiles);
+    setSelectedFiles((prev) => [...prev, ...files]);
     setUploadError("");
     setSelectedEchoId("");
-
-    try {
-      await handleUpload(nextFiles);
-    } catch (error) {
-      // erro já tratado no handleUpload
-    }
+    setUploadSuccess(false);
+    setUploadCount(0);
   };
 
   const handleRemoveSelectedFile = (indexToRemove) => {
@@ -156,6 +145,7 @@ export default function ManualAnnotationSetup() {
       setUploadCount(files.length);
       setSelectedEchoId(echoIdFromResponse);
       setUploadSuccess(true);
+      setSelectedFiles([]);
 
       // mantém no modo upload
       setEchoMode("upload");
@@ -383,6 +373,19 @@ export default function ManualAnnotationSetup() {
                         <p className="text-sm text-gray-600">A carregar ficheiros...</p>
                       )}
                       {uploadError && <p className="text-sm text-red">{uploadError}</p>}
+
+                      {selectedFiles.length > 0 && (
+                        <div className="flex justify-end">
+                          <button
+                            type="button"
+                            className="rounded-lg bg-green-dark px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                            onClick={() => handleUpload(selectedFiles)}
+                            disabled={!selectedPatientId || uploading}
+                          >
+                            Carregar ficheiros selecionados
+                          </button>
+                        </div>
+                      )}
 
                       {uploadSuccess && uploadCount > 0 && (
                         <div className="rounded-md border border-green-pale bg-white p-3 text-sm text-gray-700">

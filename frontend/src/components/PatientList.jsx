@@ -191,7 +191,7 @@ function EchocardiogramsTable({ patient, reloadTable }) {
       <table className='table-fixed w-full border-collapse'>
         <thead>
           <tr>
-            <th className="w-1/10 px-4 py-1 text-left truncate border-b-2">Comparar</th>
+            <th className="w-14 px-4 py-1 border-b-2" aria-label="Selecionar para comparar" />
             <th className="w-1/4 px-4 py-1 text-left truncate border-b-2">Exame</th>
             <th className="w-1/6 px-4 py-1 text-left truncate border-b-2">Data</th>
             <th className="w-1/8 px-4 py-1 text-left truncate border-b-2">
@@ -222,6 +222,7 @@ function EchocardiogramsTable({ patient, reloadTable }) {
                     checked={selectedExams.includes(echo.id)}
                     onChange={() => handleToggleExam(echo.id)}
                     disabled={!selectedExams.includes(echo.id) && selectedExams.length >= 2}
+                    aria-label={`Selecionar ${echo.description} para comparação`}
                   />
                 </td>
                 <td className="px-4 py-1"><strong>{echo.description}</strong></td>

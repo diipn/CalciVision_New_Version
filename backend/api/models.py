@@ -40,6 +40,12 @@ class Echocardiogram(models.Model):
     dicom_file = models.FileField(upload_to='dicom/')
     uploaded_at = models.DateTimeField(auto_now_add=True)
     description = models.TextField(blank=True, null=True)
+    vo = models.FloatField(blank=True, null=True)
+    vo_frame_count = models.PositiveIntegerField(default=0)
+    vo_white_pixels = models.PositiveIntegerField(default=0)
+    vo_gray_pixels = models.PositiveIntegerField(default=0)
+    vo_roi_pixels = models.PositiveIntegerField(default=0)
+    vo_metadata = models.JSONField(default=dict, blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.REVIEW_NEEDED)
 
     def __str__(self):
@@ -64,6 +70,10 @@ class EchoFrameData(models.Model):
     confidence = models.FloatField(default=0.0, blank=True)
     is_annotation_generated = models.BooleanField(null=True)
     is_calcification_generated = models.BooleanField(null=True)
+    objective_variable = models.FloatField(blank=True, null=True)
+    white_pixel_count = models.PositiveIntegerField(blank=True, null=True)
+    gray_pixel_count = models.PositiveIntegerField(blank=True, null=True)
+    valid_pixel_count = models.PositiveIntegerField(blank=True, null=True)
     
     def __str__(self):
         return f"Data for frame {self.frame.frame_index} of {self.frame.echocardiogram.patient.name}"

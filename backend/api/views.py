@@ -3,7 +3,12 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.conf import settings
 from .tasks import run_calcium_model, run_valve_model, batch_valve_detection, crop_valve_image, save_frame_from_patient_screening
-from .utils import process_echocardiogram, get_screening_progress_key
+from .utils import (
+    aggregate_objective_variable_metrics,
+    get_screening_progress_key,
+    process_echocardiogram,
+    quantify_objective_variable,
+)
 from celery import chain
 import redis
 
@@ -25,6 +30,35 @@ logger = logging.getLogger(__name__)
 
 def hello(request: HttpRequest):
     return Response({ "message": "Hello from Django!" })
+
+
+def _extract_primary_rect(rects: list[dict]) -> dict | None:
+    if not rects:
+        return None
+
+    rect = rects[0]
+    return {
+        'x': rect.get('x'),
+        'y': rect.get('y'),
+        'width': rect.get('width'),
+        'height': rect.get('height'),
+    }
+
+
+def _build_vo_metadata(summary: dict | None, source: str) -> dict:
+    if not summary:
+        return {
+            'source': source,
+            'version': 1,
+            'frame_count': 0,
+        }
+
+    return {
+        'source': source,
+        'version': 1,
+        'frame_count': int(summary.get('frame_count', 0)),
+        'vo_percentage': float(summary.get('vo_percentage', 0.0)),
+    }
 
 @api_view(['GET'])
 @authentication_classes([JWTAuthentication])
@@ -298,6 +332,8 @@ def save_patient_screening_results(request: HttpRequest):
     if not results or not isinstance(results, list):
         return Response({ 'error': 'Invalid or missing results' }, status=status.HTTP_400_BAD_REQUEST)
     
+    touched_echo_ids = set()
+
     for frame_data in results:
         patient_id = frame_data.get('patient_id')
         echo_id = frame_data.get('echo_id')
@@ -316,6 +352,19 @@ def save_patient_screening_results(request: HttpRequest):
             frame = EchoFrame.objects.get(id=frame_id, echocardiogram=echocardiogram)
         except (Patient.DoesNotExist, Echocardiogram.DoesNotExist, EchoFrame.DoesNotExist):
             continue  # Ignora frames com pacientes ou ecocardiogramas inexistentes
+
+        touched_echo_ids.add(echocardiogram.id)
+
+        quantification_rect = None
+        if all(key in rect for key in ['x1', 'y1', 'x2', 'y2']):
+            quantification_rect = {
+                'x': rect.get('x1'),
+                'y': rect.get('y1'),
+                'width': rect.get('x2') - rect.get('x1'),
+                'height': rect.get('y2') - rect.get('y1'),
+            }
+
+        objective_metrics = quantify_objective_variable(frame.image.path, quantification_rect) if quantification_rect else None
         
         existing_data = EchoFrameData.objects.filter(frame=frame, doctor=request.user).first()
         if existing_data:
@@ -327,6 +376,10 @@ def save_patient_screening_results(request: HttpRequest):
             existing_data.is_calcified = is_calcified
             existing_data.is_calcification_generated = True
             existing_data.confidence = confidence
+            existing_data.objective_variable = objective_metrics['vo'] if objective_metrics else None
+            existing_data.white_pixel_count = objective_metrics['white_pixel_count'] if objective_metrics else None
+            existing_data.gray_pixel_count = objective_metrics['gray_pixel_count'] if objective_metrics else None
+            existing_data.valid_pixel_count = objective_metrics['valid_pixel_count'] if objective_metrics else None
             existing_data.save()
         else:
             EchoFrameData.objects.create(
@@ -340,6 +393,10 @@ def save_patient_screening_results(request: HttpRequest):
                 confidence=confidence,
                 is_annotation_generated=True,
                 is_calcification_generated=True,
+                objective_variable=objective_metrics['vo'] if objective_metrics else None,
+                white_pixel_count=objective_metrics['white_pixel_count'] if objective_metrics else None,
+                gray_pixel_count=objective_metrics['gray_pixel_count'] if objective_metrics else None,
+                valid_pixel_count=objective_metrics['valid_pixel_count'] if objective_metrics else None,
             )
         
         if echocardiogram.status != Echocardiogram.Status.EVALUATED:
@@ -351,6 +408,40 @@ def save_patient_screening_results(request: HttpRequest):
             patient.status = Patient.Status.EVALUATED
             patient.updated_at = timezone.now()
             patient.save()
+
+    for echo_id in touched_echo_ids:
+        echocardiogram = Echocardiogram.objects.filter(id=echo_id, patient__doctor=request.user).first()
+        if echocardiogram is None:
+            continue
+
+        stored_metrics = EchoFrameData.objects.filter(
+            frame__echocardiogram=echocardiogram,
+            doctor=request.user,
+        )
+
+        objective_summary = aggregate_objective_variable_metrics([
+            {
+                'white_pixel_count': data.white_pixel_count,
+                'gray_pixel_count': data.gray_pixel_count,
+                'valid_pixel_count': data.valid_pixel_count,
+            }
+            for data in stored_metrics
+        ])
+
+        echocardiogram.vo = objective_summary['vo'] if objective_summary else None
+        echocardiogram.vo_frame_count = objective_summary['frame_count'] if objective_summary else 0
+        echocardiogram.vo_white_pixels = objective_summary['white_pixel_count'] if objective_summary else 0
+        echocardiogram.vo_gray_pixels = objective_summary['gray_pixel_count'] if objective_summary else 0
+        echocardiogram.vo_roi_pixels = objective_summary['valid_pixel_count'] if objective_summary else 0
+        echocardiogram.vo_metadata = _build_vo_metadata(objective_summary, source='patient_screening')
+        echocardiogram.save(update_fields=[
+            'vo',
+            'vo_frame_count',
+            'vo_white_pixels',
+            'vo_gray_pixels',
+            'vo_roi_pixels',
+            'vo_metadata',
+        ])
                    
     return Response({ 'message': 'Screening results saved successfully' }, status=status.HTTP_201_CREATED)
 
@@ -643,6 +734,69 @@ def get_frames_for_echocardiogram(request: HttpRequest, patient_id: int, echo_id
 @api_view(['POST'])
 @authentication_classes([JWTAuthentication])
 @permission_classes([IsAuthenticated])
+def quantify_echocardiogram_objective_variable(request: HttpRequest, patient_id: int, echo_id: int):
+    """
+    Calcula a VO com base nos frames e nas bboxes atualmente anotadas, sem persistir o resultado.
+    """
+    serializer = FrameResultsSerializer(data=request.data.get('results'), many=True)
+
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        patient = Patient.objects.get(id=patient_id, doctor=request.user)
+    except Patient.DoesNotExist:
+        return Response({ 'error': 'Patient not found or unauthorized' }, status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        echocardiogram = Echocardiogram.objects.get(id=echo_id, patient=patient)
+    except Echocardiogram.DoesNotExist:
+        return Response({ 'error': 'Echocardiogram not found' }, status=status.HTTP_404_NOT_FOUND)
+
+    frame_metrics = []
+
+    for frame_data in serializer.validated_data:
+        frame = get_object_or_404(EchoFrame, id=frame_data['frame_id'], echocardiogram=echocardiogram)
+        primary_rect = _extract_primary_rect(frame_data.get('rects', []))
+        if primary_rect is None:
+            continue
+
+        metrics = quantify_objective_variable(frame.image.path, primary_rect)
+        if metrics is None:
+            continue
+
+        frame_metrics.append({
+            'frame_id': frame.id,
+            'objective_variable': metrics['vo'],
+            'objective_variable_percentage': metrics['vo_percentage'],
+            'white_pixel_count': metrics['white_pixel_count'],
+            'gray_pixel_count': metrics['gray_pixel_count'],
+            'valid_pixel_count': metrics['valid_pixel_count'],
+            'bbox': metrics['bbox'],
+        })
+
+    summary = aggregate_objective_variable_metrics(frame_metrics)
+
+    if summary is None:
+        return Response(
+            { 'error': 'Nenhuma ROI válida foi encontrada para calcular a VO.' },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    return Response({
+        'vo': summary['vo'],
+        'vo_percentage': summary['vo_percentage'],
+        'white_pixel_count': summary['white_pixel_count'],
+        'gray_pixel_count': summary['gray_pixel_count'],
+        'valid_pixel_count': summary['valid_pixel_count'],
+        'frame_count': summary['frame_count'],
+        'frames': frame_metrics,
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
 def create_or_update_echocardiogram_data(request: HttpRequest, patient_id: int, echo_id: int):
     """
     Cria ou atualiza os dados da posição da válvula aórtica e calcificação (EcoFrameData) para cada frame de um ecocardiograma
@@ -655,7 +809,7 @@ def create_or_update_echocardiogram_data(request: HttpRequest, patient_id: int, 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
     # Acessa os dados válidos
-    frames : list[dict] = serializer.validated_data
+    frames: list[dict] = serializer.validated_data
     
     # Verifica se o paciente existe e se o médico está autorizado para trabalhar com ele
     try:
@@ -690,47 +844,63 @@ def create_or_update_echocardiogram_data(request: HttpRequest, patient_id: int, 
         echocardiogram.status = Echocardiogram.Status.IN_PROGRESS
         echocardiogram.save()
     
+    frame_metrics = []
+
     for frame_data in frames:
-        # Acessa o frame_id, as anotações e a classificação binária do frame
         frame_id = frame_data.get('frame_id')
         rects = frame_data.get('rects', [])
         is_calcified = frame_data.get('is_calcified')
         generated_calcium = frame_data.get('generated_calcium')
-        
-        # Obtem a instância frame na base de dados, garantindo que é exatamente o mesmo
+
         frame = get_object_or_404(EchoFrame, id=frame_id, echocardiogram=echocardiogram)
-        
-        for rect in rects:
-            # Obtem os resultados já existentes para o frame dados pelo médico, se existirem
-            existing_data = EchoFrameData.objects.filter(frame=frame, doctor=request.user).first()
-            
-            # Se já existerem resultados, atualiza-os com os novos dados
-            if existing_data:
-                existing_data.x = rect['x']
-                existing_data.y = rect['y']
-                existing_data.width = rect['width']
-                existing_data.height = rect['height']
-                existing_data.is_calcified = is_calcified
-                existing_data.is_annotation_generated = rect['is_annotation_generated']
-                existing_data.is_calcification_generated = generated_calcium
-                existing_data.save()
-            # Senão, cria um EchoFrameData associado ao frame com os dados
-            else:
-                EchoFrameData.objects.create(
-                    frame=frame,
-                    doctor=request.user,
-                    x=rect['x'],
-                    y=rect['y'],
-                    width=rect['width'],
-                    height=rect['height'],
-                    is_calcified=is_calcified,
-                    is_annotation_generated=rect['is_annotation_generated'],
-                    is_calcification_generated=generated_calcium,
-                )
-        
-        # Atualiza a data de modificação do paciente
-        patient.updated_at = timezone.now()
-        patient.save(update_fields=['updated_at'])
+        primary_rect = _extract_primary_rect(rects)
+
+        if primary_rect is None:
+            EchoFrameData.objects.filter(frame=frame, doctor=request.user).delete()
+            continue
+
+        objective_metrics = quantify_objective_variable(frame.image.path, primary_rect)
+        existing_data = EchoFrameData.objects.filter(frame=frame, doctor=request.user).first()
+
+        payload = {
+            'x': primary_rect['x'],
+            'y': primary_rect['y'],
+            'width': primary_rect['width'],
+            'height': primary_rect['height'],
+            'is_calcified': is_calcified,
+            'is_annotation_generated': rects[0]['is_annotation_generated'],
+            'is_calcification_generated': generated_calcium,
+            'objective_variable': objective_metrics['vo'] if objective_metrics else None,
+            'white_pixel_count': objective_metrics['white_pixel_count'] if objective_metrics else None,
+            'gray_pixel_count': objective_metrics['gray_pixel_count'] if objective_metrics else None,
+            'valid_pixel_count': objective_metrics['valid_pixel_count'] if objective_metrics else None,
+        }
+
+        if existing_data:
+            for field, value in payload.items():
+                setattr(existing_data, field, value)
+            existing_data.save()
+        else:
+            EchoFrameData.objects.create(
+                frame=frame,
+                doctor=request.user,
+                **payload,
+            )
+
+        if objective_metrics:
+            frame_metrics.append(objective_metrics)
+
+    objective_summary = aggregate_objective_variable_metrics(frame_metrics)
+    echocardiogram.vo = objective_summary['vo'] if objective_summary else None
+    echocardiogram.vo_frame_count = objective_summary['frame_count'] if objective_summary else 0
+    echocardiogram.vo_white_pixels = objective_summary['white_pixel_count'] if objective_summary else 0
+    echocardiogram.vo_gray_pixels = objective_summary['gray_pixel_count'] if objective_summary else 0
+    echocardiogram.vo_roi_pixels = objective_summary['valid_pixel_count'] if objective_summary else 0
+    echocardiogram.vo_metadata = _build_vo_metadata(objective_summary, source='manual_annotation')
+    echocardiogram.save()
+
+    patient.updated_at = timezone.now()
+    patient.save()
     
     return Response({ 'message': 'Annotations saved successfully' }, status=status.HTTP_201_CREATED)
 
@@ -742,6 +912,11 @@ def get_echocardiogram_data_by_patient(request: HttpRequest, patient_id: int):
         frame__echocardiogram__patient__doctor=request.user,
         frame__echocardiogram__patient_id=patient_id
     )
+
+    echo_id = request.GET.get('echo_id')
+    if echo_id:
+        echo_data = echo_data.filter(frame__echocardiogram_id=echo_id)
+
     serializer = EchoFrameDataSerializer(echo_data, many=True)
     return Response(serializer.data)
 

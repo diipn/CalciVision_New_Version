@@ -1,6 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import api, { createReport, getEchoResults, getExamSettings, updateExamSettings } from "../api";
+import api, {
+  createReport,
+  getEchoResults,
+  getExamSettings,
+  quantifyObjectiveVariable,
+  updateExamSettings,
+} from "../api";
 import { useUser } from "../contexts/UserContext";
 import { useUnsavedStore } from "../store/useUnsavedStore";
 import ReportPDF from "./ReportPDF";
@@ -293,14 +299,17 @@ export default function AnalysisWizard({
         : classificationChoice
         ? "Calcificada"
         : "Não calcificada";
-    const template = `RELATÓRIO CLÍNICO - CALCIVISION\n\nPaciente: ${patient.name}\nData do exame: ${new Date(exam.date).toLocaleDateString("pt-PT")}\nVariável Objectiva (VO): ${
+    const examDate = exam.date || exam.uploaded_at;
+    const template = `RELATÓRIO CLÍNICO - CALCIVISION\n\nPaciente: ${patient.name}\nData do exame: ${
+      examDate ? new Date(examDate).toLocaleDateString("pt-PT") : "N/A"
+    }\nVariável Objectiva (VO): ${
       voEffective !== null ? `${voEffective.toFixed(0)}%` : "N/A"
     }\nClassificação: ${classificationLabel}\n\nObservações automáticas:\n- Comparação longitudinal recomendada para acompanhar a progressão.\n- Este resultado é uma simulação e não substitui a decisão clínica.\n\nObservações clínicas:\n${clinicalNotes || "—"}\n\nAssinatura: ${user?.first_name || "Médico"} ${user?.last_name || ""}`;
     setReportText(template);
     setUnsavedChanges(true);
     await updateExamSettings(echoId, { reportText: template });
     try {
-      const pdfBlob = await generatePdfBlob();
+      const pdfBlob = await generatePdfBlob(template);
       const formData = new FormData();
       formData.append("pdf_file", pdfBlob, `report_${patient.id}.pdf`);
       await createReport(formData, patient.id);
@@ -319,15 +328,14 @@ export default function AnalysisWizard({
     await updateExamSettings(echoId, { clinicalNotes: value });
   };
 
-  const generatePdfBlob = async () => {
-    const echoData = await getEchoResults(patient.id);
-    const combinedReport = reportText;
+  const generatePdfBlob = async (reportOverride = reportText) => {
+    const echoData = await getEchoResults(patient.id, echoId);
     const doc = (
       <ReportPDF
         data={echoData}
         patient={patient}
         medico={user}
-        reportText={combinedReport}
+        reportText={reportOverride}
       />
     );
     const asPdf = pdf([]);
@@ -335,81 +343,104 @@ export default function AnalysisWizard({
     return asPdf.toBlob();
   };
 
-  const handleAutoQuantifyVO = async () => {
-  if (isValidated) return;
+  const buildFrameResults = () =>
+    frames.map((frame, frameIndex) => {
+      const frameRects = Array.isArray(rects?.[frameIndex]) ? rects[frameIndex] : [];
+      const cleanedRects = frameRects
+        .map((rect, rectIndex) => ({
+          id: String(rect?.id ?? `${frame.id}-${rectIndex}`),
+          x: Number(rect?.x),
+          y: Number(rect?.y),
+          width: Number(rect?.width),
+          height: Number(rect?.height),
+          is_annotation_generated: Boolean(rect?.is_annotation_generated),
+        }))
+        .filter(
+          (rect) =>
+            Number.isFinite(rect.x) &&
+            Number.isFinite(rect.y) &&
+            Number.isFinite(rect.width) &&
+            Number.isFinite(rect.height)
+        );
 
-  const randomValue = Math.floor(Math.random() * 101); // 0–100
+      const frameCalc = calcification?.[frameIndex];
+      const calcValue = frameCalc?.binary_classification;
+      const isCalcified =
+        calcValue === null || calcValue === undefined
+          ? typeof calcificationStatus === "boolean"
+            ? calcificationStatus
+            : null
+          : Boolean(calcValue);
+      const generatedCalcium =
+        typeof frameCalc?.is_calcification_generated === "boolean"
+          ? frameCalc.is_calcification_generated
+          : null;
 
-  // VO efectiva deve mudar -> override tem de ficar ON
-  setVoOverrideEnabled(true);
-  setVoOverrideValue(randomValue);
-
-  // mas NÃO queremos abrir modo manual / checkbox marcada
-  setVoManualUiEnabled(false);
-
-  setUnsavedChanges(true);
-  addToast(`VO quantificada automaticamente: ${randomValue}/100`, "success");
-
-  try {
-    await updateExamSettings(echoId, {
-      voOverrideEnabled: true,      // ✅ igual ao state
-      voOverrideValue: randomValue,
+      return {
+        frame_id: frame.id,
+        rects: cleanedRects,
+        is_calcified: isCalcified,
+        generated_calcium: generatedCalcium,
+      };
     });
-  } catch (error) {
-    console.error("Erro ao guardar VO automática:", error);
-    addToast("Não foi possível guardar a VO automática.", "error");
-  }
-};
+
+  const handleAutoQuantifyVO = async () => {
+    if (isValidated || !patient?.id) return;
+
+    const results = buildFrameResults();
+    const annotatedFrames = results.filter((frame) => frame.rects.length > 0);
+
+    if (annotatedFrames.length === 0) {
+      addToast("Defina pelo menos uma ROI da válvula antes de quantificar a VO.", "error");
+      return;
+    }
+
+    try {
+      const response = await quantifyObjectiveVariable(patient.id, echoId, results);
+      const quantifiedValue = Number(response?.vo_percentage);
+
+      if (!Number.isFinite(quantifiedValue)) {
+        throw new Error("VO inválida recebida da API.");
+      }
+
+      const roundedValue = Math.round(quantifiedValue);
+
+      setVoOverrideEnabled(true);
+      setVoOverrideValue(roundedValue);
+      setVoManualUiEnabled(false);
+      setUnsavedChanges(true);
+
+      addToast(`VO quantificada automaticamente: ${roundedValue}/100`, "success");
+
+      await updateExamSettings(echoId, {
+        voOverrideEnabled: true,
+        voOverrideValue: roundedValue,
+      });
+    } catch (error) {
+      console.error("Erro ao quantificar a VO:", error);
+      addToast("Não foi possível quantificar automaticamente a VO.", "error");
+    }
+  };
 
   const handleExportPdf = async () => {
     if (!reportText) return;
     const pdfBlob = await generatePdfBlob();
     const url = URL.createObjectURL(pdfBlob);
-    window.open(url, "_blank");
+    const link = document.createElement("a");
+    const patientSlug =
+      patient?.name?.trim()?.replace(/\s+/g, "_").toLowerCase() || `patient_${patient?.id || "report"}`;
+    link.href = url;
+    link.download = `relatorio_${patientSlug}_${echoId}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   const handleUpdateEcho = async (completed) => {
     try {
       if (!patient) return;
-      const results = frames.map((frame, frameIndex) => {
-        const frameRects = Array.isArray(rects?.[frameIndex]) ? rects[frameIndex] : [];
-        const cleanedRects = frameRects
-          .map((rect, rectIndex) => ({
-            id: String(rect?.id ?? `${frame.id}-${rectIndex}`),
-            x: Number(rect?.x),
-            y: Number(rect?.y),
-            width: Number(rect?.width),
-            height: Number(rect?.height),
-            is_annotation_generated: Boolean(rect?.is_annotation_generated),
-          }))
-          .filter(
-            (rect) =>
-              Number.isFinite(rect.x) &&
-              Number.isFinite(rect.y) &&
-              Number.isFinite(rect.width) &&
-              Number.isFinite(rect.height)
-          );
-
-        const frameCalc = calcification?.[frameIndex];
-        const calcValue = frameCalc?.binary_classification;
-        const isCalcified =
-          calcValue === null || calcValue === undefined
-            ? typeof calcificationStatus === "boolean"
-              ? calcificationStatus
-              : null
-            : Boolean(calcValue);
-        const generatedCalcium =
-          typeof frameCalc?.is_calcification_generated === "boolean"
-            ? frameCalc.is_calcification_generated
-            : null;
-
-        return {
-          frame_id: frame.id,
-          rects: cleanedRects,
-          is_calcified: isCalcified,
-          generated_calcium: generatedCalcium,
-        };
-      });
+      const results = buildFrameResults();
 
       await updateExamSettings(echoId, {
         classificationOverride: classificationChoice,

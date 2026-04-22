@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { createPatient } from "../api";
+import { calculateAgeFromBirthDate } from "../utils/patientAge";
 
 const PatientRegister = ({ onClose }) => {
   const [form, setForm] = useState({
@@ -17,6 +18,19 @@ const PatientRegister = ({ onClose }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+
+  useEffect(() => {
+    if (!form.birth_date) {
+      setForm((prev) => ({ ...prev, age: "" }));
+      return;
+    }
+
+    const calculatedAge = calculateAgeFromBirthDate(form.birth_date);
+    setForm((prev) => ({
+      ...prev,
+      age: calculatedAge === null ? "" : String(calculatedAge),
+    }));
+  }, [form.birth_date]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -164,7 +178,7 @@ const PatientRegister = ({ onClose }) => {
               type="number"
               name="age"
               value={form.age}
-              onChange={handleChange}
+              readOnly
               required
               min="0"
               placeholder="Idade"

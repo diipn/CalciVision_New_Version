@@ -14,21 +14,6 @@ export default function ClinicalReportStep({
 }) {
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border border-green-pale bg-white p-4 text-center">
-        <h3 className="text-base font-semibold text-green-dark">Gerar relatório</h3>
-        <p className="mt-1 text-sm text-gray-600">
-          Gere automaticamente o relatório clínico a partir da análise.
-        </p>
-        <button
-          type="button"
-          className="mt-3 w-full rounded-md bg-green-dark px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-          onClick={onGenerate}
-          disabled={!canGenerate}
-        >
-          Gerar relatório
-        </button>
-      </div>
-
       <div className="rounded-lg border border-green-pale bg-white p-4">
         <div className="flex items-center justify-between">
           <h4 className="text-sm font-semibold text-gray-800">Observações clínicas</h4>
@@ -43,6 +28,21 @@ export default function ClinicalReportStep({
           onChange={(event) => onNotesChange(event.target.value)}
           placeholder="Escreva observações clínicas adicionais..."
         />
+      </div>
+
+      <div className="rounded-lg border border-green-pale bg-white p-4 text-center">
+        <h3 className="text-base font-semibold text-green-dark">Gerar relatório</h3>
+        <p className="mt-1 text-sm text-gray-600">
+          Gere automaticamente o relatório clínico a partir da análise.
+        </p>
+        <button
+          type="button"
+          className="mt-3 w-full rounded-md bg-green-dark px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          onClick={onGenerate}
+          disabled={!canGenerate}
+        >
+          Gerar relatório
+        </button>
       </div>
 
       <div className="space-y-3">

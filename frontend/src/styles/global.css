@@ -125,6 +125,31 @@
   color: var(--color-green-pale) !important
 }
 
+input[type="checkbox"] {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--color-green-dark);
+  border-radius: 4px;
+  background-color: transparent;
+  display: inline-grid;
+  place-items: center;
+  vertical-align: middle;
+}
+
+input[type="checkbox"]:checked {
+  background-color: transparent;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23205941' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M3 8.5l3 3L13 4.5'/%3E%3C/svg%3E");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 12px 12px;
+}
+
+input[type="checkbox"]:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 /* interpolate-size é uma propriedade recente que ainda não é suportada pelo React */
 .patient-row-menu {
   interpolate-size: allow-keywords;

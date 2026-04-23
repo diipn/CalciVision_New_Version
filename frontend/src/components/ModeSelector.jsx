@@ -16,12 +16,12 @@ const modeOptions = [
 export default function ModeSelector({ mode, onChange, disabled, showDescription = true }) {
   return (
     <div className="space-y-3">
-      <div className="flex rounded-lg border border-green-pale bg-white p-1">
+      <div className="grid grid-cols-2 gap-2 rounded-lg border border-green-pale bg-white p-1">
         {modeOptions.map((option) => (
           <button
             key={option.value}
             type="button"
-            className={`flex-1 rounded-md px-3 py-2 text-sm font-semibold transition ${
+            className={`min-w-0 rounded-md px-4 py-2.5 text-[13px] font-semibold leading-none whitespace-nowrap transition ${
               mode === option.value
                 ? "bg-green-dark text-white"
                 : "text-green-dark hover:bg-green-50"

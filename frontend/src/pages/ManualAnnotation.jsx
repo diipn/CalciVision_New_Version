@@ -1,33 +1,43 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import MainLayout from '../layouts/MainLayout';
 import AnnotationTool from '../components/AnnotationTool';
 import AnalysisWizard from '../components/AnalysisWizard';
 import FrameNavigator from '../components/FrameNavigator';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import api, { getExamSettings, updateExamSettings } from '../api';
 import { useUnsavedStore } from '../store/useUnsavedStore';
 import { defaultImageSettings } from '../constants';
 
+const createEmptyExamState = (exam = null) => ({
+  exam,
+  frames: [],
+  rects: [],
+  currentFrame: 0,
+  calcification: [],
+  framesLoading: true,
+  loadError: '',
+  predictionHistory: [],
+  predictedValveBoxes: [],
+  calcificationStatus: null,
+  imageSettings: defaultImageSettings,
+});
+
+const hasAdjustedImageSettings = (settings) =>
+  ['brightness', 'contrast', 'blur', 'zoom'].some(
+    (key) => (settings?.[key] ?? defaultImageSettings[key]) !== defaultImageSettings[key]
+  );
+
 export default function ManualAnnotation() {
-  const [frames, setFrames] = useState([]);
-  const [rects, setRects] = useState([]);
-  const [currentFrame, setCurrentFrame] = useState(0);
-  const [calcification, setCalcification] = useState([]);
-  const [framesLoading, setFramesLoading] = useState(true);
-  // Histórico de previsões. Se a previsão de cálcio para uma área já foi feita, guarda neste array em vez de enviar para o modelo desnecessariamente
-  const [predictionHistory, setPredictionHistory] = useState([]);
-  // A posição do retângulo dada pelo modelo
-  const [predictedValveBoxes, setPredictedValveBoxes] = useState([]);
-  const [calcificationStatus, setCalcificationStatus] = useState(null);
-  const [imageSettings, setImageSettings] = useState(defaultImageSettings);
+  const [examStates, setExamStates] = useState({});
+  const [patient, setPatient] = useState(null);
   const annotationToolRef = useRef(null);
 
-  const [patient, setPatient] = useState(null);
-  const [exam, setExam] = useState(null);
   const { patientId, echoId } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { hasUnsavedChanges, setUnsavedChanges } = useUnsavedStore();
+  const { setUnsavedChanges } = useUnsavedStore();
+
+  const activeExamId = String(echoId);
 
   const analysisSequence = useMemo(() => {
     const rawSequence = searchParams.get('sequence');
@@ -36,83 +46,93 @@ export default function ManualAnnotation() {
           .split(',')
           .map((value) => value.trim())
           .filter(Boolean)
-      : [];
+      : [activeExamId];
 
     const uniqueSequence = parsedSequence.filter(
       (value, index) => parsedSequence.indexOf(value) === index
     );
 
-    if (!uniqueSequence.includes(String(echoId))) {
-      uniqueSequence.unshift(String(echoId));
+    if (!uniqueSequence.includes(activeExamId)) {
+      uniqueSequence.unshift(activeExamId);
     }
 
     return uniqueSequence;
-  }, [searchParams, echoId]);
+  }, [searchParams, activeExamId]);
 
-  const currentExamSequenceIndex = Math.max(
-    0,
-    analysisSequence.findIndex((value) => value === String(echoId))
-  );
-  const hasPreviousExam = currentExamSequenceIndex > 0;
-  const hasNextExam = currentExamSequenceIndex < analysisSequence.length - 1;
+  const selectedExamFromQuery = searchParams.get('selected');
+  const initialSelectedExamId =
+    selectedExamFromQuery && analysisSequence.includes(selectedExamFromQuery)
+      ? selectedExamFromQuery
+      : analysisSequence.length === 1
+      ? activeExamId
+      : null;
 
-  const navigateToSequenceExam = (sequenceIndex) => {
-    const nextEchoId = analysisSequence[sequenceIndex];
-    if (!nextEchoId || nextEchoId === String(echoId)) return;
-
-    if (hasUnsavedChanges) {
-      const confirmLeave = window.confirm(
-        'Tens alterações por guardar neste exame. Desejas avançar mesmo assim?'
-      );
-      if (!confirmLeave) return;
-      setUnsavedChanges(false);
-    }
-
-    const search =
-      analysisSequence.length > 1 ? `?sequence=${analysisSequence.join(',')}` : '';
-    navigate(`/analyse_aortic_valve/${patientId}/${nextEchoId}${search}`);
-  };
+  const [selectedExamId, setSelectedExamId] = useState(initialSelectedExamId);
 
   useEffect(() => {
-    setFrames([]);
-    setRects([]);
-    setCurrentFrame(0);
-    setCalcification([]);
-    setPredictionHistory([]);
-    setPredictedValveBoxes([]);
-    setCalcificationStatus(null);
-    setExam(null);
-  }, [echoId]);
+    setSelectedExamId(initialSelectedExamId);
+  }, [initialSelectedExamId]);
+
+  useEffect(() => {
+    setExamStates((prev) => {
+      const next = {};
+      analysisSequence.forEach((examId) => {
+        next[examId] = prev[examId] || createEmptyExamState();
+      });
+      return next;
+    });
+  }, [analysisSequence]);
 
   useEffect(() => {
     let isActive = true;
-    let retryTimeout = null;
+    const retryTimeouts = [];
     const maxAttempts = 12;
     const retryDelayMs = 2000;
 
-    const fetchFrames = async (attempt = 0) => {
-      try {
-        const patientInfoResponse = await api.get(`/api/patient/${patientId}/`);
-        if (patientInfoResponse.status === 200 && isActive) {
-          setPatient(patientInfoResponse.data);
-        }
+    const mergeExamState = (examId, nextPartial) => {
+      if (!isActive) return;
+      setExamStates((prev) => {
+        const currentState = prev[examId] || createEmptyExamState();
+        return {
+          ...prev,
+          [examId]: {
+            ...currentState,
+            ...nextPartial,
+          },
+        };
+      });
+    };
 
+    const loadExamFrames = async (examId, patientInfo, attempt = 0) => {
+      const examMeta =
+        patientInfo?.echocardiograms?.find((item) => String(item.id) === examId) || null;
+
+      try {
         const echoFramesResponse = await api.get(
-          `/api/patient/${patientId}/echocardiogram/${echoId}/frames/`
+          `/api/patient/${patientId}/echocardiogram/${examId}/frames/`
         );
         const data = echoFramesResponse.data;
         if (!isActive) return;
 
         if (!data?.length) {
           if (attempt < maxAttempts) {
-            retryTimeout = setTimeout(() => fetchFrames(attempt + 1), retryDelayMs);
+            const timeoutId = setTimeout(
+              () => loadExamFrames(examId, patientInfo, attempt + 1),
+              retryDelayMs
+            );
+            retryTimeouts.push(timeoutId);
             return;
           }
-          setFramesLoading(false);
+
+          mergeExamState(examId, {
+            exam: examMeta,
+            framesLoading: false,
+            loadError:
+              'Não foi possível carregar os frames deste ecocardiograma. Verifique o DICOM e tente novamente.',
+          });
           return;
         }
 
-        // Atualiza os states principais
         const formattedFrames = data.map((frame) => ({
           id: frame.id,
           url: frame.image_url,
@@ -145,7 +165,6 @@ export default function ManualAnnotation() {
           };
         });
 
-
         const formattedCalcification = data.map((frame) =>
           frame.data?.[0] && frame.data[0].is_calcified !== null
             ? {
@@ -156,7 +175,6 @@ export default function ManualAnnotation() {
             : null
         );
 
-        // Preenche o histórico com os dados de `data`
         const formattedPredictionHistory = data.map((frame) => {
           const rect = frame.data?.[0];
           if (rect) {
@@ -182,182 +200,287 @@ export default function ManualAnnotation() {
           return [];
         });
 
-        // Atualiza todos os states ao mesmo tempo
-        setFrames(formattedFrames);
-        const savedProgress = localStorage.getItem(`exam-progress-${echoId}`);
+        const savedProgress = localStorage.getItem(`exam-progress-${examId}`);
+        let nextRects = formattedRects;
+        let nextCalcification = formattedCalcification;
+
         if (savedProgress) {
           try {
             const parsed = JSON.parse(savedProgress);
-            const savedRects = Array.isArray(parsed?.rects) ? parsed.rects : formattedRects;
-            const savedCalcification = Array.isArray(parsed?.calcification)
-              ? parsed.calcification
-              : formattedCalcification;
-            setRects(savedRects);
-            setCalcification(savedCalcification);
+            if (Array.isArray(parsed?.rects)) {
+              nextRects = parsed.rects;
+            }
+            if (Array.isArray(parsed?.calcification)) {
+              nextCalcification = parsed.calcification;
+            }
           } catch {
-            setRects(formattedRects);
-            setCalcification(formattedCalcification);
+            nextRects = formattedRects;
+            nextCalcification = formattedCalcification;
           }
-        } else {
-          setRects(formattedRects);
-          setCalcification(formattedCalcification);
         }
-        setPredictedValveBoxes(formattedPredictedValveBoxes);
-        setPredictionHistory(formattedPredictionHistory);
+
+        const savedSettings = await getExamSettings(examId);
+        if (!isActive) return;
 
         const currentCalc =
-          (savedProgress && (() => {
-            try {
-              const parsed = JSON.parse(savedProgress);
-              return parsed?.calcification?.[0];
-            } catch {
-              return null;
-            }
-          })()) || formattedCalcification[0];
-        if (currentCalc?.binary_classification !== null && currentCalc?.binary_classification !== undefined) {
-          setCalcificationStatus(Boolean(currentCalc.binary_classification));
-        }
-        setFramesLoading(false);
+          (savedProgress &&
+            (() => {
+              try {
+                const parsed = JSON.parse(savedProgress);
+                return parsed?.calcification?.[0];
+              } catch {
+                return null;
+              }
+            })()) ||
+          formattedCalcification[0];
+
+        mergeExamState(examId, {
+          exam: examMeta,
+          frames: formattedFrames,
+          rects: nextRects,
+          currentFrame: 0,
+          calcification: nextCalcification,
+          framesLoading: false,
+          loadError: '',
+          predictionHistory: formattedPredictionHistory,
+          predictedValveBoxes: formattedPredictedValveBoxes,
+          calcificationStatus:
+            currentCalc?.binary_classification === null ||
+            currentCalc?.binary_classification === undefined
+              ? null
+              : Boolean(currentCalc.binary_classification),
+          imageSettings: savedSettings?.imageSettings || defaultImageSettings,
+        });
       } catch (error) {
         if (!isActive) return;
-        setFramesLoading(false);
+        if (error.response && (error.response.status === 403 || error.response.status === 404)) {
+          navigate('/404');
+          return;
+        }
+
+        mergeExamState(examId, {
+          exam: examMeta,
+          framesLoading: false,
+          loadError:
+            'Não foi possível carregar os frames deste ecocardiograma. Verifique o DICOM e tente novamente.',
+        });
+      }
+    };
+
+    const fetchPatientAndCandidates = async () => {
+      try {
+        const patientInfoResponse = await api.get(`/api/patient/${patientId}/`);
+        if (!isActive) return;
+
+        setPatient(patientInfoResponse.data);
+        setExamStates((prev) => {
+          const next = { ...prev };
+          analysisSequence.forEach((examId) => {
+            const examMeta =
+              patientInfoResponse.data.echocardiograms?.find(
+                (item) => String(item.id) === examId
+              ) || null;
+            next[examId] = {
+              ...(prev[examId] || createEmptyExamState()),
+              exam: examMeta,
+            };
+          });
+          return next;
+        });
+
+        analysisSequence.forEach((examId) => {
+          loadExamFrames(examId, patientInfoResponse.data);
+        });
+      } catch (error) {
+        if (!isActive) return;
         if (error.response && (error.response.status === 403 || error.response.status === 404)) {
           navigate('/404');
         }
       }
     };
-    setFramesLoading(true);
-    fetchFrames();
+
+    fetchPatientAndCandidates();
+
     return () => {
       isActive = false;
-      if (retryTimeout) clearTimeout(retryTimeout);
+      retryTimeouts.forEach((timeoutId) => clearTimeout(timeoutId));
     };
-  }, [patientId, echoId]);
+  }, [patientId, analysisSequence, navigate]);
 
-  useEffect(() => {
-    if (patient) {
-      const currentExam = patient.echocardiograms?.find((item) => item.id == echoId);
-      setExam(currentExam || null);
-    }
-  }, [patient, echoId]);
+  const activeExamState = examStates[activeExamId] || createEmptyExamState();
+  const activeExam =
+    activeExamState.exam ||
+    patient?.echocardiograms?.find((item) => String(item.id) === activeExamId) ||
+    null;
 
-  useEffect(() => {
-    const loadSettings = async () => {
-      const settings = await getExamSettings(echoId);
-      if (settings?.imageSettings) {
-        setImageSettings(settings.imageSettings);
-      } else {
-        setImageSettings(defaultImageSettings);
-      }
-    };
-    loadSettings();
-  }, [echoId]);
+  const updateExamField = (examId, field, updater) => {
+    setExamStates((prev) => {
+      const currentState = prev[examId] || createEmptyExamState();
+      const nextValue =
+        typeof updater === 'function' ? updater(currentState[field]) : updater;
+
+      return {
+        ...prev,
+        [examId]: {
+          ...currentState,
+          [field]: nextValue,
+        },
+      };
+    });
+  };
 
   const handleImageSettingsChange = async (nextSettings) => {
-    setImageSettings(nextSettings);
-    await updateExamSettings(echoId, { imageSettings: nextSettings });
+    updateExamField(activeExamId, 'imageSettings', nextSettings);
+    await updateExamSettings(activeExamId, { imageSettings: nextSettings });
     setUnsavedChanges(true);
   };
 
+  const buildAnalysisPath = (nextExamId, nextSelectedExamId = selectedExamId) => {
+    const params = new URLSearchParams();
+
+    if (analysisSequence.length > 1) {
+      params.set('sequence', analysisSequence.join(','));
+    }
+
+    if (nextSelectedExamId) {
+      params.set('selected', nextSelectedExamId);
+    }
+
+    const queryString = params.toString();
+    return `/analyse_aortic_valve/${patientId}/${nextExamId}${
+      queryString ? `?${queryString}` : ''
+    }`;
+  };
+
+  const handleActiveExamChange = (nextExamId) => {
+    if (!nextExamId || nextExamId === activeExamId) return;
+    navigate(buildAnalysisPath(nextExamId), { replace: true });
+  };
+
+  const handleSelectCurrentExam = () => {
+    setSelectedExamId(activeExamId);
+    navigate(buildAnalysisPath(activeExamId, activeExamId), { replace: true });
+  };
+
+  const comparisonCandidates = useMemo(
+    () =>
+      analysisSequence.map((examId, index) => {
+        const state = examStates[examId] || createEmptyExamState();
+        const examMeta =
+          state.exam ||
+          patient?.echocardiograms?.find((item) => String(item.id) === examId) ||
+          null;
+
+        const hasAnnotation = state.rects.some((frameRects) => frameRects?.length > 0);
+        const hasDetectionTested =
+          state.predictedValveBoxes.some(Boolean) ||
+          state.rects.some((frameRects) =>
+            frameRects?.some((rect) => rect?.is_annotation_generated)
+          );
+
+        const rawDate = examMeta?.date || examMeta?.uploaded_at;
+        const dateLabel = rawDate
+          ? new Date(rawDate).toLocaleDateString('pt-PT', {
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric',
+            })
+          : null;
+
+        return {
+          id: examId,
+          orderLabel: `DICOM ${index + 1}`,
+          label: examMeta?.description || `Ecocardiograma ${examId}`,
+          dateLabel,
+          thumbnailUrl: state.frames[0]?.url || null,
+          framesCount: state.frames.length,
+          isLoading: state.framesLoading,
+          loadError: state.loadError,
+          isActive: examId === activeExamId,
+          isSelected: examId === selectedExamId,
+          hasAnnotation,
+          hasDetectionTested,
+          hasImageAdjustments: hasAdjustedImageSettings(state.imageSettings),
+        };
+      }),
+    [analysisSequence, examStates, patient, activeExamId, selectedExamId]
+  );
+
   return (
     <MainLayout pageTitle={`Anotação da Válvula Aórtica — ${patient?.name || 'CalciVision'}`}>
-      {analysisSequence.length > 1 && (
-        <div className="mb-4 rounded-lg border border-green-pale bg-white px-4 py-3 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                Sequência de análise
-              </p>
-              <h2 className="text-base font-semibold text-gray-900">
-                Exame {currentExamSequenceIndex + 1} de {analysisSequence.length}
-              </h2>
-              <p className="text-sm text-gray-600">
-                {exam?.description || `Ecocardiograma ${echoId}`}
-              </p>
-              {hasNextExam && (
-                <p className="mt-1 text-xs text-gray-500">
-                  Após submeter este exame, o próximo abre automaticamente.
-                </p>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                className="rounded-md border border-green-pale px-3 py-2 text-sm font-semibold text-green-dark disabled:opacity-40"
-                onClick={() => navigateToSequenceExam(currentExamSequenceIndex - 1)}
-                disabled={!hasPreviousExam}
-              >
-                Exame anterior
-              </button>
-              <button
-                type="button"
-                className="rounded-md border border-green-pale px-3 py-2 text-sm font-semibold text-green-dark disabled:opacity-40"
-                onClick={() => navigateToSequenceExam(currentExamSequenceIndex + 1)}
-                disabled={!hasNextExam}
-              >
-                Próximo exame
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {framesLoading && (
+      {activeExamState.framesLoading && (
         <div className="mb-4 rounded-lg border border-green-pale bg-green-light/40 px-4 py-3 text-sm text-green-dark">
-          A carregar imagens do ecocardiograma. Isto pode demorar alguns segundos.
+          A carregar imagens do ecocardiograma selecionado. Isto pode demorar alguns segundos.
         </div>
       )}
-      {!framesLoading && frames.length === 0 && (
+      {!activeExamState.framesLoading && activeExamState.loadError && (
         <div className="mb-4 rounded-lg border border-red/30 bg-red/5 px-4 py-3 text-sm text-red">
-          Não foi possível carregar os frames do ecocardiograma. Verifique o DICOM e tente novamente.
+          {activeExamState.loadError}
         </div>
       )}
+
       <AnalysisWizard
         annotationToolRef={annotationToolRef}
-        frames={frames}
-        rects={rects}
-        calcification={calcification}
-        calcificationStatus={calcificationStatus}
-        setCalcificationStatus={setCalcificationStatus}
-        predictionHistory={predictionHistory}
+        frames={activeExamState.frames}
+        currentFrame={activeExamState.currentFrame}
+        currentFrameSrc={activeExamState.frames[activeExamState.currentFrame]?.url}
+        rects={activeExamState.rects}
+        calcification={activeExamState.calcification}
+        calcificationStatus={activeExamState.calcificationStatus}
+        setCalcificationStatus={(value) =>
+          updateExamField(activeExamId, 'calcificationStatus', value)
+        }
+        predictionHistory={activeExamState.predictionHistory}
         patient={patient}
-        exam={exam}
-        echoId={echoId}
-        imageSettings={imageSettings}
+        exam={activeExam}
+        echoId={activeExamId}
+        imageSettings={activeExamState.imageSettings}
         onImageSettingsChange={handleImageSettingsChange}
         defaultImageSettings={defaultImageSettings}
-        hasNextExam={hasNextExam}
-        onAdvanceToNextExam={
-          hasNextExam
-            ? () => navigateToSequenceExam(currentExamSequenceIndex + 1)
-            : undefined
-        }
+        comparisonCandidates={comparisonCandidates}
+        activeExamId={activeExamId}
+        selectedExamId={selectedExamId}
+        onActiveExamChange={handleActiveExamChange}
+        onSelectCurrentExam={handleSelectCurrentExam}
         renderCanvas={(handleAnnotationChanged) => (
-          <>
-            <AnnotationTool
-              ref={annotationToolRef}
-              frames={frames}
-              currentFrame={currentFrame}
-              rects={rects}
-              setRects={setRects}
-              calcificationStatus={calcificationStatus}
-              setCalcificationStatus={setCalcificationStatus}
-              predictedValveBoxes={predictedValveBoxes}
-              setPredictedValveBoxes={setPredictedValveBoxes}
-              calcification={calcification}
-              setCalcification={setCalcification}
-              predictionHistory={predictionHistory}
-              setPredictionHistory={setPredictionHistory}
-              imageSettings={imageSettings}
-              onImageSettingsChange={handleImageSettingsChange}
-              onAnnotationChange={handleAnnotationChanged}
-            />
-            <FrameNavigator
-              frames={frames}
-              rects={rects}
-              currentFrame={currentFrame}
-              setCurrentFrame={setCurrentFrame}
-            />
-          </>
+          <AnnotationTool
+            key={activeExamId}
+            ref={annotationToolRef}
+            frames={activeExamState.frames}
+            currentFrame={activeExamState.currentFrame}
+            rects={activeExamState.rects}
+            setRects={(updater) => updateExamField(activeExamId, 'rects', updater)}
+            calcificationStatus={activeExamState.calcificationStatus}
+            setCalcificationStatus={(value) =>
+              updateExamField(activeExamId, 'calcificationStatus', value)
+            }
+            predictedValveBoxes={activeExamState.predictedValveBoxes}
+            setPredictedValveBoxes={(updater) =>
+              updateExamField(activeExamId, 'predictedValveBoxes', updater)
+            }
+            calcification={activeExamState.calcification}
+            setCalcification={(updater) =>
+              updateExamField(activeExamId, 'calcification', updater)
+            }
+            predictionHistory={activeExamState.predictionHistory}
+            setPredictionHistory={(updater) =>
+              updateExamField(activeExamId, 'predictionHistory', updater)
+            }
+            imageSettings={activeExamState.imageSettings}
+            onImageSettingsChange={handleImageSettingsChange}
+            onAnnotationChange={handleAnnotationChanged}
+          />
+        )}
+        renderCanvasFooter={() => (
+          <FrameNavigator
+            key={`navigator-${activeExamId}`}
+            frames={activeExamState.frames}
+            rects={activeExamState.rects}
+            currentFrame={activeExamState.currentFrame}
+            setCurrentFrame={(value) =>
+              updateExamField(activeExamId, 'currentFrame', value)
+            }
+          />
         )}
       />
     </MainLayout>

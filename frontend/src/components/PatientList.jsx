@@ -25,7 +25,7 @@ export default function PatientList({ patients, defaultPatient, reloadTable }) {
         <thead className='border-b-2'>
           <tr>
             <th className='w-1/20' />
-            <th className='w-1/6 px-4 py-2 text-left'>Doente</th>
+            <th className='w-1/6 px-4 py-2 text-left'>Paciente</th>
             <th className='w-1/9 px-4 py-2 text-left'>Atualizado</th>
             <th className='w-1/6 px-4 py-2 text-left'>Morada</th>
             <th className='w-1/5 px-4 py-2 text-left'>Email</th>
@@ -145,10 +145,7 @@ function PatientRow({ patient, defaultState, reloadTable }) {
 function EchocardiogramsTable({ patient, reloadTable }) {
   const navigate = useNavigate();
   const [selectedExams, setSelectedExams] = useState([]);
-  const [selectionFeedback, setSelectionFeedback] = useState({
-    type: 'info',
-    message: 'Selecione dois exames para abrir a comparação.',
-  });
+  const [selectionError, setSelectionError] = useState('');
 
   const reportsByExam = useMemo(() => {
     const map = {};
@@ -161,52 +158,27 @@ function EchocardiogramsTable({ patient, reloadTable }) {
   }, [patient.reports]);
 
   const handleToggleExam = (examId) => {
+    setSelectionError('');
     setSelectedExams((prev) => {
       if (prev.includes(examId)) {
-        const nextSelected = prev.filter((id) => id !== examId);
-        setSelectionFeedback({
-          type: 'info',
-          message:
-            nextSelected.length === 0
-              ? 'Selecione dois exames para abrir a comparação.'
-              : 'Selecione mais um exame para concluir a comparação.',
-        });
-        return nextSelected;
+        return prev.filter((id) => id !== examId);
       }
       if (prev.length >= 2) {
-        setSelectionFeedback({
-          type: 'error',
-          message: 'Pode comparar no máximo dois exames em simultâneo.',
-        });
+        setSelectionError('Pode comparar no máximo dois exames em simultâneo.');
         return prev;
       }
-
-      const nextSelected = [...prev, examId];
-      setSelectionFeedback({
-        type: 'info',
-        message:
-          nextSelected.length === 2
-            ? 'Dois exames selecionados. Pode abrir a comparação.'
-            : 'Selecione mais um exame para concluir a comparação.',
-      });
-      return nextSelected;
+      return [...prev, examId];
     });
   };
 
   const handleCompareClick = () => {
     if (selectedExams.length === 0) {
-      setSelectionFeedback({
-        type: 'error',
-        message: 'Selecione dois exames primeiro para abrir a comparação.',
-      });
+      setSelectionError('Selecione dois exames primeiro para abrir a comparação.');
       return;
     }
 
     if (selectedExams.length === 1) {
-      setSelectionFeedback({
-        type: 'error',
-        message: 'Falta selecionar mais um exame para comparar.',
-      });
+      setSelectionError('Falta selecionar mais um exame para comparar.');
       return;
     }
 
@@ -241,21 +213,19 @@ function EchocardiogramsTable({ patient, reloadTable }) {
         </button>
       </div>
 
-      <div
-        role={selectionFeedback.type === 'error' ? 'alert' : 'status'}
-        className={`mb-4 rounded-lg border px-4 py-3 text-sm ${
-          selectionFeedback.type === 'error'
-            ? 'border-red/30 bg-red/5 text-red'
-            : 'border-green-pale bg-white text-gray-medium-dark'
-        }`}
-      >
-        {selectionFeedback.message}
-      </div>
+      {selectionError && (
+        <div
+          role="alert"
+          className="mb-4 rounded-lg border border-red/30 bg-red/5 px-4 py-3 text-sm text-red"
+        >
+          {selectionError}
+        </div>
+      )}
 
       <table className='table-fixed w-full border-collapse'>
         <thead>
           <tr>
-            <th className="w-16 px-4 py-1 text-left truncate border-b-2">Comparar</th>
+            <th className="w-12 px-4 py-1 border-b-2" aria-label="Selecionar exames para comparar" />
             <th className="w-1/4 px-4 py-1 text-left truncate border-b-2">Exame</th>
             <th className="w-1/6 px-4 py-1 text-left truncate border-b-2">Data</th>
             <th className="w-1/8 px-4 py-1 text-left truncate border-b-2">

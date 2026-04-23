@@ -1,5 +1,6 @@
 import axios from "axios";
 import { ACCESS_TOKEN } from "./constants";
+import { applyLocalVoOverrides } from "./utils/examComparison";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
@@ -104,8 +105,8 @@ export const createExamWithFrames = async (patientId, description, files) => {
 };
 
 export const getPatientExams = async (patientId) => {
-  const patients = await getPatients();
-  const patient = patients.find((item) => item.id === Number(patientId));
+  const patients = applyLocalVoOverrides(await getPatients());
+  const patient = patients.find((item) => String(item.id) === String(patientId));
   return patient?.echocardiograms || [];
 };
 

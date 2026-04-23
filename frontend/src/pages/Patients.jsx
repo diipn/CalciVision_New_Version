@@ -10,6 +10,7 @@ import patientScreeningIcon from "@assets/icons/patient_screening.svg";
 import { useSearchParams } from 'react-router-dom';
 import AlertDialogMenu from '../components/AlertDialogMenu';
 import { usePatientScreening } from '../hooks/usePatientScreening';
+import { applyLocalVoOverrides } from '../utils/examComparison';
 
 const getRiskLabel = (vo) => {
   if (vo === undefined || vo === null) return null;
@@ -17,32 +18,6 @@ const getRiskLabel = (vo) => {
   if (vo < 0.66) return 'Médio';
   return 'Alto';
 };
-
-const getLocalVoOverride = (echoId) => {
-  if (!echoId) return null;
-  if (typeof window === 'undefined' || !window.localStorage) return null;
-  try {
-    const raw = localStorage.getItem(`exam-settings-${echoId}`);
-    if (!raw) return null;
-    const settings = JSON.parse(raw);
-    if (!settings?.voOverrideEnabled) return null;
-    const value = Number(settings.voOverrideValue);
-    if (!Number.isFinite(value)) return null;
-    return value > 1 ? value / 100 : value;
-  } catch {
-    return null;
-  }
-};
-
-const applyLocalVoOverrides = (patients) =>
-  (patients || []).map((patient) => ({
-    ...patient,
-    echocardiograms: (patient.echocardiograms || []).map((echo) => {
-      const overrideVo = getLocalVoOverride(echo?.id);
-      if (overrideVo === null || overrideVo === undefined) return echo;
-      return { ...echo, vo: overrideVo };
-    }),
-  }));
 
 export default function Patients() {
 
@@ -114,21 +89,21 @@ export default function Patients() {
   };
 
   return (
-    <MainLayout pageTitle="Doentes - CalciVision">
+    <MainLayout pageTitle="Pacientes - CalciVision">
 
       {showRegister && (
         <PatientRegister onClose={() => setShowRegister(false)} />
       )}
 
-      <h3 className='mb-4'>Doentes</h3>
-      <p className='text-lg mb-8'>Nesta página pode gerir todos os doentes, consultar ecocardiogramas e aceder a relatórios da válvula aórtica.</p>
+      <h3 className='mb-4'>Pacientes</h3>
+      <p className='text-lg mb-8'>Nesta página pode gerir todos os pacientes, consultar ecocardiogramas e aceder a relatórios da válvula aórtica.</p>
       <div className='flex flex-wrap justify-start items-center mb-5 gap-4'>
         <div className='mr-auto flex items-center gap-4 flex-wrap'>
           <button
             className='w-fit py-1 px-3 flex items-center gap-2 rounded-lg bg-green text-white'
             onClick={() => setShowRegister(true)}
           >
-            Adicionar doente
+            Adicionar paciente
             <img className='w-5 h-5 object-contain' src={addIcon} alt="Adicionar" role="icon" />
           </button>
 
@@ -136,14 +111,14 @@ export default function Patients() {
             heading='Pré-visualização da triagem'
             content={
               pendingPatients.length === 0 ? (
-                <p className='text-red'>Não existem doentes com avaliações pendentes.</p>
+                <p className='text-red'>Não existem pacientes com avaliações pendentes.</p>
               ) : (
                 <div className='flex flex-col gap-2'>
-                  <p>Vai iniciar a análise automática para todos os doentes com ecocardiogramas pendentes.</p>
+                  <p>Vai iniciar a análise automática para todos os pacientes com ecocardiogramas pendentes.</p>
                   {pendingPatients.length <= 3 ? (
-                    <p>Foram selecionados <strong>{pendingPatients.length} doente(s)</strong>: {pendingPatients.map(p => p.name).join(', ')}.</p>
+                    <p>Foram selecionados <strong>{pendingPatients.length} paciente(s)</strong>: {pendingPatients.map(p => p.name).join(', ')}.</p>
                   ) : (
-                    <p>Foram selecionados <strong>{pendingPatients.length} doentes</strong>, incluindo {pendingPatients.slice(0, 3).map(p => p.name).join(', ')} e mais {pendingPatients.length - 3} adicionais.</p>
+                    <p>Foram selecionados <strong>{pendingPatients.length} pacientes</strong>, incluindo {pendingPatients.slice(0, 3).map(p => p.name).join(', ')} e mais {pendingPatients.length - 3} adicionais.</p>
                   )}
                   <p>Deseja continuar?</p>
                 </div>
@@ -166,7 +141,7 @@ export default function Patients() {
             type='search'
             autoComplete='on'
             role='input'
-            placeholder='Pesquisar doente'
+            placeholder='Pesquisar paciente'
             className='w-48 grow p-1 outline-none'
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
@@ -199,7 +174,7 @@ export default function Patients() {
         </div>
       </div>
       {loading ? (
-        <div>A carregar doentes...</div>
+        <div>A carregar pacientes...</div>
       ) : (
         <PatientList
           patients={filteredPatients}

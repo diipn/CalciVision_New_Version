@@ -30,3 +30,33 @@ export const formatExamDate = (dateValue) => {
     year: 'numeric',
   });
 };
+
+export const getLocalVoOverride = (echoId) => {
+  if (!echoId) return null;
+  if (typeof window === 'undefined' || !window.localStorage) return null;
+
+  try {
+    const raw = window.localStorage.getItem(`exam-settings-${echoId}`);
+    if (!raw) return null;
+
+    const settings = JSON.parse(raw);
+    if (!settings?.voOverrideEnabled) return null;
+
+    const value = Number(settings.voOverrideValue);
+    if (!Number.isFinite(value)) return null;
+
+    return value > 1 ? value / 100 : value;
+  } catch {
+    return null;
+  }
+};
+
+export const applyLocalVoOverrides = (patients) =>
+  (patients || []).map((patient) => ({
+    ...patient,
+    echocardiograms: (patient.echocardiograms || []).map((echo) => {
+      const overrideVo = getLocalVoOverride(echo?.id);
+      if (overrideVo === null || overrideVo === undefined) return echo;
+      return { ...echo, vo: overrideVo };
+    }),
+  }));

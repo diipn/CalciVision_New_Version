@@ -4,6 +4,10 @@ import MainLayout from '../layouts/MainLayout';
 import api, { getPatientExams, getPatients } from '../api';
 import { formatExamDate, formatVo, getRiskBadge, normalizeVo } from '../utils/examComparison';
 
+function matchesExamId(exam, examId) {
+  return String(exam?.id) === String(examId);
+}
+
 function PreviewState({ src, loading, label }) {
   if (src) {
     return (
@@ -119,7 +123,7 @@ export default function CompareExams() {
 
         setExams(patientExams || []);
         const patient = patients.find((item) => item.id === Number(patientId));
-        setPatientName(patient?.name || 'Doente');
+        setPatientName(patient?.name || 'Paciente');
       } catch (error) {
         if (!isMounted) return;
         console.error('Erro ao carregar comparação de exames:', error);
@@ -180,11 +184,11 @@ export default function CompareExams() {
   }, [patientId, examIdA, examIdB]);
 
   const examA = useMemo(
-    () => exams.find((exam) => exam.id === Number(examIdA)),
+    () => exams.find((exam) => matchesExamId(exam, examIdA)),
     [exams, examIdA]
   );
   const examB = useMemo(
-    () => exams.find((exam) => exam.id === Number(examIdB)),
+    () => exams.find((exam) => matchesExamId(exam, examIdB)),
     [exams, examIdB]
   );
 
@@ -207,7 +211,7 @@ export default function CompareExams() {
             <h3 className="mb-2">Comparação de exames</h3>
             <p className="text-sm text-gray-medium-dark">
               {patientName ? `${patientName} · ` : ''}
-              Compare dois exames do mesmo doente.
+              Compare dois exames do mesmo paciente.
             </p>
           </div>
           <button

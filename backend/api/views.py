@@ -2,9 +2,12 @@ from django.http import HttpRequest
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.conf import settings
+from django.db.models import Prefetch
 from .tasks import run_calcium_model, run_valve_model, batch_valve_detection, crop_valve_image, save_frame_from_patient_screening
 from .utils import (
+    TEMPORAL_PRIORITY_THRESHOLDS,
     aggregate_objective_variable_metrics,
+    build_longitudinal_evolution,
     get_screening_progress_key,
     process_echocardiogram,
     quantify_objective_variable,
@@ -578,6 +581,79 @@ def patient_with_ecos(request: HttpRequest):
     patients = Patient.objects.filter(doctor=request.user).prefetch_related('echocardiograms').all()
     serializer = PatientWithEchocardiogramSerializer(patients, many=True)
     return Response(serializer.data)
+
+
+@api_view(['GET'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def temporal_panel_data(request: HttpRequest):
+    """
+    Expõe o histórico cronológico de exames por paciente para o Painel Temporal.
+    """
+    patients = (
+        Patient.objects
+        .filter(doctor=request.user)
+        .prefetch_related(
+            Prefetch(
+                'echocardiograms',
+                queryset=Echocardiogram.objects.order_by('uploaded_at', 'id'),
+            )
+        )
+        .order_by('name')
+    )
+
+    payload = []
+
+    for patient in patients:
+        ordered_echos = list(patient.echocardiograms.all())
+        if not ordered_echos:
+            continue
+
+        exams = []
+        for echo in ordered_echos:
+            vo_percentage = round(float(echo.vo) * 100, 2) if echo.vo is not None else None
+            exam_date = echo.uploaded_at.date().isoformat() if echo.uploaded_at else None
+
+            exams.append({
+                'exam_id': echo.id,
+                'description': echo.description or f'Ecocardiograma #{echo.id}',
+                'exam_date': exam_date,
+                'uploaded_at': echo.uploaded_at.isoformat() if echo.uploaded_at else None,
+                'status': echo.status,
+                'vo': float(echo.vo) if echo.vo is not None else None,
+                'vo_percentage': vo_percentage,
+                'is_comparable': vo_percentage is not None,
+                'comparable_metrics': {
+                    'frame_count': int(echo.vo_frame_count or 0),
+                    'white_pixel_count': int(echo.vo_white_pixels or 0),
+                    'gray_pixel_count': int(echo.vo_gray_pixels or 0),
+                    'roi_pixel_count': int(echo.vo_roi_pixels or 0),
+                },
+            })
+
+        evolution = build_longitudinal_evolution(exams)
+
+        payload.append({
+            'id': patient.id,
+            'name': patient.name,
+            'birth_year': patient.birth_date.year if patient.birth_date else None,
+            'sex': patient.gender,
+            'last_exam_date': exams[-1]['exam_date'] if exams else None,
+            'exam_count': len(exams),
+            'comparable_exam_count': len([exam for exam in exams if exam['is_comparable']]),
+            'timeline': {
+                'is_chronological': True,
+                'metric_label': 'Índice de Calcificação',
+                'exams': exams,
+                'evolution': evolution,
+            },
+        })
+
+    return Response({
+        'metric_label': 'Índice de Calcificação',
+        'thresholds': TEMPORAL_PRIORITY_THRESHOLDS,
+        'patients': payload,
+    }, status=status.HTTP_200_OK)
 
 
 ### VIEWS DOS REPORTS ###

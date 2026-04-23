@@ -110,6 +110,16 @@ export const getPatientExams = async (patientId) => {
   return patient?.echocardiograms || [];
 };
 
+export const getTemporalPanelData = async () => {
+  try {
+    const response = await api.get("/api/patients/temporal-panel/");
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching temporal panel data:", error);
+    throw error;
+  }
+};
+
 export const getExamSettings = async (examId) => {
   const cached = localStorage.getItem(`exam-settings-${examId}`);
   if (cached) {

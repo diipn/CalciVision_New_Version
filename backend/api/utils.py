@@ -6,6 +6,7 @@ from django.conf import settings
 import os
 import numpy as np
 import json
+from datetime import date, datetime
 from PIL import Image
 from io import BytesIO
 
@@ -18,6 +19,15 @@ OBJECTIVE_VARIABLE_BLACK_THRESHOLD = 10
 OBJECTIVE_VARIABLE_GRAY_THRESHOLD = 120
 OBJECTIVE_VARIABLE_WHITE_THRESHOLD = 200
 
+TEMPORAL_PRIORITY_THRESHOLDS = {
+    'monthly_warn': 4.0,
+    'monthly_high': 8.0,
+    'annual_warn': 35.0,
+    'annual_high': 70.0,
+    'value_warn': 30.0,
+    'value_high': 50.0,
+}
+
 
 def _require_cv2():
     if cv2 is None:
@@ -29,6 +39,195 @@ def _normalize_task_id(task_id: str) -> str:
     if not task_id:
         return "task_unknown"
     return task_id if task_id.startswith("task_") else f"task_{task_id}"
+
+
+def _as_date(value) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    return None
+
+
+def _months_between(start_value, end_value) -> float:
+    start = _as_date(start_value)
+    end = _as_date(end_value)
+    if not start or not end:
+        return 0.0
+
+    total_months = (end.year - start.year) * 12 + (end.month - start.month)
+    day_fraction = (end.day - start.day) / 30.0
+    return max(total_months + day_fraction, 0.0)
+
+
+def _compute_relative_delta(start_value: float | None, end_value: float | None) -> float | None:
+    if start_value is None or end_value is None:
+        return None
+    if start_value <= 0:
+        return None
+    return ((end_value - start_value) / start_value) * 100.0
+
+
+def _compute_rate(relative_delta_pct: float | None, months_between: float) -> float | None:
+    if relative_delta_pct is None or months_between <= 0:
+        return None
+    return relative_delta_pct / months_between
+
+
+def _build_trend(intervals: list[dict]) -> dict:
+    usable_intervals = [item for item in intervals if item.get('absolute_delta') is not None]
+    if len(usable_intervals) < 2:
+        return {
+            'direction': 'insufficient_data',
+            'label': 'Dados insuficientes',
+            'score': 0,
+        }
+
+    recent = usable_intervals[-2:]
+    average_delta = sum(item['absolute_delta'] for item in recent) / len(recent)
+
+    if average_delta > 2:
+        return {
+            'direction': 'up',
+            'label': 'Tendência a aumentar',
+            'score': 1,
+        }
+    if average_delta < -2:
+        return {
+            'direction': 'down',
+            'label': 'Tendência a diminuir',
+            'score': -1,
+        }
+    return {
+        'direction': 'stable',
+        'label': 'Estável',
+        'score': 0,
+    }
+
+
+def _build_priority(latest_value: float | None, monthly_rate_pct: float | None, annual_rate_pct: float | None) -> dict:
+    thresholds = TEMPORAL_PRIORITY_THRESHOLDS
+
+    high = (
+        (latest_value is not None and latest_value >= thresholds['value_high'])
+        or (monthly_rate_pct is not None and monthly_rate_pct >= thresholds['monthly_high'])
+        or (annual_rate_pct is not None and annual_rate_pct >= thresholds['annual_high'])
+    )
+    watch = (
+        (latest_value is not None and latest_value >= thresholds['value_warn'])
+        or (monthly_rate_pct is not None and monthly_rate_pct >= thresholds['monthly_warn'])
+        or (annual_rate_pct is not None and annual_rate_pct >= thresholds['annual_warn'])
+    )
+
+    if high:
+        return {
+            'level': 'high',
+            'label': 'Prioridade alta',
+            'sort_weight': 2,
+        }
+    if watch:
+        return {
+            'level': 'watch',
+            'label': 'Acompanhar',
+            'sort_weight': 1,
+        }
+    return {
+        'level': 'normal',
+        'label': 'Sem prioridade adicional',
+        'sort_weight': 0,
+    }
+
+
+def _build_suggestions(comparable_exam_count: int, priority: dict, trend: dict) -> list[str]:
+    suggestions = []
+
+    if comparable_exam_count < 2:
+      suggestions.append('Registar pelo menos dois exames com VO para ativar a evolução longitudinal.')
+      return suggestions
+
+    if priority.get('level') == 'high':
+        suggestions.append('Rever este paciente com prioridade na equipa clínica.')
+    elif priority.get('level') == 'watch':
+        suggestions.append('Agendar reavaliação clínica e confirmar a evolução no próximo exame.')
+
+    if trend.get('direction') == 'up':
+        suggestions.append('Monitorizar a progressão da variável objetiva na sequência de exames seguintes.')
+
+    if not suggestions:
+        suggestions.append('Manter seguimento temporal e acumular mais exames comparáveis.')
+
+    return suggestions
+
+
+def build_longitudinal_evolution(exams: list[dict]) -> dict:
+    comparable_exams = [exam for exam in exams if exam.get('is_comparable')]
+
+    if not comparable_exams:
+        trend = _build_trend([])
+        priority = _build_priority(None, None, None)
+        return {
+            'baseline_exam_id': None,
+            'latest_exam_id': None,
+            'baseline_vo_percentage': None,
+            'latest_vo_percentage': None,
+            'absolute_delta': None,
+            'relative_delta_percentage': None,
+            'months_between': None,
+            'monthly_rate_percentage': None,
+            'annual_rate_percentage': None,
+            'intervals': [],
+            'trend': trend,
+            'priority': priority,
+            'suggestions': _build_suggestions(0, priority, trend),
+        }
+
+    intervals = []
+    for index in range(1, len(comparable_exams)):
+        previous_exam = comparable_exams[index - 1]
+        current_exam = comparable_exams[index]
+        months_between = _months_between(previous_exam.get('exam_date'), current_exam.get('exam_date'))
+        absolute_delta = current_exam['vo_percentage'] - previous_exam['vo_percentage']
+        relative_delta = _compute_relative_delta(previous_exam['vo_percentage'], current_exam['vo_percentage'])
+
+        intervals.append({
+            'from_exam_id': previous_exam['exam_id'],
+            'to_exam_id': current_exam['exam_id'],
+            'from_date': previous_exam.get('exam_date'),
+            'to_date': current_exam.get('exam_date'),
+            'from_vo_percentage': previous_exam['vo_percentage'],
+            'to_vo_percentage': current_exam['vo_percentage'],
+            'absolute_delta': round(absolute_delta, 2),
+            'relative_delta_percentage': round(relative_delta, 2) if relative_delta is not None else None,
+            'months_between': round(months_between, 2) if months_between else None,
+        })
+
+    baseline_exam = comparable_exams[0]
+    latest_exam = comparable_exams[-1]
+    total_months = _months_between(baseline_exam.get('exam_date'), latest_exam.get('exam_date'))
+    absolute_delta = latest_exam['vo_percentage'] - baseline_exam['vo_percentage']
+    relative_delta = _compute_relative_delta(baseline_exam['vo_percentage'], latest_exam['vo_percentage'])
+    monthly_rate = _compute_rate(relative_delta, total_months)
+    annual_rate = monthly_rate * 12 if monthly_rate is not None else None
+    trend = _build_trend(intervals)
+    priority = _build_priority(latest_exam['vo_percentage'], monthly_rate, annual_rate)
+
+    return {
+        'baseline_exam_id': baseline_exam['exam_id'],
+        'latest_exam_id': latest_exam['exam_id'],
+        'baseline_vo_percentage': baseline_exam['vo_percentage'],
+        'latest_vo_percentage': latest_exam['vo_percentage'],
+        'absolute_delta': round(absolute_delta, 2),
+        'relative_delta_percentage': round(relative_delta, 2) if relative_delta is not None else None,
+        'months_between': round(total_months, 2) if total_months else None,
+        'monthly_rate_percentage': round(monthly_rate, 2) if monthly_rate is not None else None,
+        'annual_rate_percentage': round(annual_rate, 2) if annual_rate is not None else None,
+        'intervals': intervals,
+        'trend': trend,
+        'priority': priority,
+        'suggestions': _build_suggestions(len(comparable_exams), priority, trend),
+    }
 
 
 def get_screening_progress_key(task_id: str) -> str:

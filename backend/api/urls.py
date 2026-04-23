@@ -22,6 +22,7 @@ urlpatterns = [
     path('patient/<int:patient_id>/echocardiogram/<int:echo_id>/delete/', views.delete_echocardiogram, name='delete_echocardiogram'),
     path('patient/<int:patient_id>/echodata/', views.get_echocardiogram_data_by_patient, name='echodata-by-patient'),
     path('patients-with-ecos/', views.patient_with_ecos, name='patient_with_ecos'),
+    path('patients/temporal-panel/', views.temporal_panel_data, name='temporal_panel_data'),
 
     path('reports/<int:patient_id>/create/', views.create_report, name='create_report'),
     path('reports/<int:patient_id>/', views.get_report, name='get_report'),

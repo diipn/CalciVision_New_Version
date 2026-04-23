@@ -1,143 +1,39 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import MainLayout from "../layouts/MainLayout";
+import { getTemporalPanelData } from "../api";
 
-// ✅ Escala apenas para apresentação (não afecta cálculos/alertas)
-const VALUE_SCALE = 10;
-const toDisplayValue = (v) => v / VALUE_SCALE;
-const formatDisplayValue = (v) => {
-  // 95 -> 9.5 (mantém 1 casa); 470 -> 47 (sem casas)
-  const rounded1 = Math.round(v * 10) / 10;
-  return Number.isInteger(rounded1) ? String(rounded1) : rounded1.toFixed(1);
+const DEFAULT_THRESHOLDS = {
+  monthly_warn: 4,
+  monthly_high: 8,
+  annual_warn: 35,
+  annual_high: 70,
+  value_warn: 30,
+  value_high: 50,
 };
 
-// ---------------------------
-// Mock data (protótipo)
-// ---------------------------
-const MOCK_PATIENTS = [
-  {
-    id: "P-001",
-    name: "Paulo Borges",
-    birthYear: 1959,
-    sex: "M",
-    lastExamDate: "2026-01-12",
-    objectiveVarName: "Índice de Calcificação",
-    exams: [
-      { date: "2024-03-10", value: 210 },
-      { date: "2024-10-10", value: 275 },
-      { date: "2025-06-10", value: 360 },
-      { date: "2026-01-12", value: 470 },
-    ],
-  },
-  {
-    id: "P-002",
-    name: "Ana Martins",
-    birthYear: 1968,
-    sex: "F",
-    lastExamDate: "2025-12-20",
-    objectiveVarName: "Índice de Calcificação",
-    exams: [
-      { date: "2024-01-07", value: 120 },
-      { date: "2024-09-07", value: 140 },
-      { date: "2025-03-07", value: 165 },
-      { date: "2025-12-20", value: 185 },
-    ],
-  },
-  {
-    id: "P-003",
-    name: "João Costa",
-    birthYear: 1951,
-    sex: "M",
-    lastExamDate: "2026-01-03",
-    objectiveVarName: "Índice de Calcificação",
-    exams: [
-      { date: "2024-07-03", value: 340 },
-      { date: "2025-01-03", value: 410 },
-      { date: "2025-07-03", value: 520 },
-      { date: "2026-01-03", value: 720 },
-    ],
-  },
-  {
-    id: "P-004",
-    name: "Marta Silva",
-    birthYear: 1972,
-    sex: "F",
-    lastExamDate: "2025-11-05",
-    objectiveVarName: "Índice de Calcificação",
-    exams: [
-      { date: "2024-05-05", value: 95 },
-      { date: "2024-11-05", value: 98 },
-      { date: "2025-05-05", value: 102 },
-      { date: "2025-11-05", value: 110 },
-    ],
-  },
-];
-
-// ---------------------------
-// Helpers
-// ---------------------------
-function clamp(n, min, max) {
-  return Math.max(min, Math.min(max, n));
+function parseISODate(value) {
+  return value ? new Date(`${value}T00:00:00`) : new Date(0);
 }
 
-function parseISODate(d) {
-  const [y, m, day] = d.split("-").map(Number);
-  return new Date(y, m - 1, day);
+function formatExamDate(value) {
+  if (!value) return "—";
+  return new Date(`${value}T00:00:00`).toLocaleDateString("pt-PT", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
 }
 
-function monthsBetween(d1, d2) {
-  const a = parseISODate(d1);
-  const b = parseISODate(d2);
-  const years = b.getFullYear() - a.getFullYear();
-  const months = b.getMonth() - a.getMonth();
-  const total = years * 12 + months;
-  const dayFrac = (b.getDate() - a.getDate()) / 30;
-  return total + dayFrac;
+function formatValue(value) {
+  if (value === null || value === undefined || Number.isNaN(value)) return "N/A";
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
 
-function computeRatePercent(exams, period = "monthly") {
-  if (!exams || exams.length < 2) return 0;
-
-  const first = exams[0];
-  const last = exams[exams.length - 1];
-
-  const delta = last.value - first.value;
-  const base = Math.max(first.value, 1);
-
-  const months = Math.max(monthsBetween(first.date, last.date), 1 / 30);
-  const perMonth = (delta / base) / months;
-
-  if (period === "annual") return perMonth * 12 * 100;
-  return perMonth * 100;
-}
-
-function computeTrend(exams) {
-  if (!exams || exams.length < 3) return { label: "Estável", score: 0 };
-
-  const a = exams[exams.length - 3].value;
-  const b = exams[exams.length - 2].value;
-  const c = exams[exams.length - 1].value;
-
-  const slope1 = b - a;
-  const slope2 = c - b;
-  const avg = (slope1 + slope2) / 2;
-
-  if (avg > 8) return { label: "Tendência a aumentar", score: 1 };
-  if (avg < -8) return { label: "Tendência a diminuir", score: -1 };
-  return { label: "Estável", score: 0 };
-}
-
-function getAlertLevel({ rateMonthlyPct, rateAnnualPct, lastValue, thresholds }) {
-  const { monthlyWarn, monthlyCrit, annualWarn, annualCrit, valueWarn, valueCrit } = thresholds;
-
-  // ✅ lastValue e thresholds continuam RAW (sem escala)
-  if (rateMonthlyPct >= monthlyCrit || rateAnnualPct >= annualCrit || lastValue >= valueCrit) return "critical";
-  if (rateMonthlyPct >= monthlyWarn || rateAnnualPct >= annualWarn || lastValue >= valueWarn) return "warning";
-  return "none";
-}
-
-function formatPct(n) {
-  const sign = n > 0 ? "+" : "";
-  return `${sign}${n.toFixed(1)}%`;
+function formatPct(value) {
+  if (value === null || value === undefined || Number.isNaN(value)) return "N/A";
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${value.toFixed(1)}%`;
 }
 
 function Chip({ children, tone = "neutral" }) {
@@ -147,37 +43,38 @@ function Chip({ children, tone = "neutral" }) {
     critical: "bg-red-100 text-red-900 border border-red-900/10",
     good: "bg-emerald-100 text-emerald-900 border border-emerald-900/10",
   };
+
   return (
-    <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm ${tones[tone] || tones.neutral}`}>
+    <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm ${tones[tone] || tones.neutral}`}>
       {children}
     </span>
   );
 }
 
 function Sparkline({ values = [], height = 26 }) {
-  const w = 140;
+  const width = 140;
   const h = height;
 
   if (!values.length) {
-    return <div className="w-[140px] h-[26px] rounded-md bg-gray-100 border border-gray-200" />;
+    return <div className="h-[26px] w-[140px] rounded-md border border-gray-200 bg-gray-100" />;
   }
 
-  const minV = Math.min(...values);
-  const maxV = Math.max(...values);
-  const range = Math.max(maxV - minV, 1);
+  const minValue = Math.min(...values);
+  const maxValue = Math.max(...values);
+  const range = Math.max(maxValue - minValue, 1);
 
-  const pts = values
-    .map((v, i) => {
-      const x = (i / Math.max(values.length - 1, 1)) * (w - 2) + 1;
-      const y = h - ((v - minV) / range) * (h - 2) - 1;
+  const points = values
+    .map((value, index) => {
+      const x = (index / Math.max(values.length - 1, 1)) * (width - 2) + 1;
+      const y = h - ((value - minValue) / range) * (h - 2) - 1;
       return `${x},${y}`;
     })
     .join(" ");
 
   return (
-    <svg width={w} height={h} className="rounded-md bg-white border border-gray-200">
+    <svg width={width} height={h} className="rounded-md border border-gray-200 bg-white">
       <polyline
-        points={pts}
+        points={points}
         fill="none"
         stroke="currentColor"
         strokeWidth="2"
@@ -185,361 +82,503 @@ function Sparkline({ values = [], height = 26 }) {
         strokeLinejoin="round"
         strokeLinecap="round"
       />
-      {values.length > 0 && (
-        <circle
-          cx={(w - 2) + 1}
-          cy={h - ((values[values.length - 1] - minV) / range) * (h - 2) - 1}
-          r="2.6"
-          className="fill-green"
-        />
-      )}
+      <circle
+        cx={(width - 2) + 1}
+        cy={h - ((values[values.length - 1] - minValue) / range) * (h - 2) - 1}
+        r="2.6"
+        className="fill-green"
+      />
     </svg>
   );
 }
 
-// ---------------------------
-// Page
-// ---------------------------
+function InfoTooltip({ content }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div
+      className="relative inline-flex"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        type="button"
+        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-green-dark/20 bg-white text-xs font-semibold text-green-dark"
+        aria-label="Informação sobre a evolução"
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+      >
+        i
+      </button>
+      {open && (
+        <div className="absolute left-0 top-7 z-20 w-72 rounded-xl border border-gray-200 bg-white p-3 text-xs leading-5 text-gray-dark shadow-lg">
+          {content}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LoadingState() {
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
+        {[0, 1, 2, 3].map((item) => (
+          <div key={item} className="animate-pulse rounded-2xl border border-gray-200 bg-white p-4">
+            <div className="h-4 w-28 rounded bg-green-light/50" />
+            <div className="mt-3 h-8 w-36 rounded bg-green-light/50" />
+            <div className="mt-3 h-4 w-44 rounded bg-green-light/40" />
+          </div>
+        ))}
+      </div>
+
+      <div className="rounded-2xl border border-gray-200 bg-white p-4">
+        <div className="animate-pulse space-y-3">
+          <div className="h-5 w-48 rounded bg-green-light/50" />
+          <div className="h-12 rounded bg-green-light/30" />
+          <div className="h-12 rounded bg-green-light/30" />
+          <div className="h-12 rounded bg-green-light/30" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function PainelTemporal() {
+  const [panelData, setPanelData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [period, setPeriod] = useState("monthly");
-  const [sortBy, setSortBy] = useState("rate");
+  const [sortBy, setSortBy] = useState("priority");
   const [sortDir, setSortDir] = useState("desc");
   const [search, setSearch] = useState("");
   const [onlyAlerts, setOnlyAlerts] = useState(false);
 
-  const [thresholds] = useState({
-    monthlyWarn: 12,
-    monthlyCrit: 20,
-    annualWarn: 80,
-    annualCrit: 120,
-    valueWarn: 450,
-    valueCrit: 650,
-  });
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchPanelData = async () => {
+      setLoading(true);
+      setError("");
+
+      try {
+        const data = await getTemporalPanelData();
+        if (!isMounted) return;
+        setPanelData(data);
+      } catch (fetchError) {
+        if (!isMounted) return;
+        setError("Não foi possível carregar o histórico temporal dos pacientes.");
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchPanelData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const thresholds = panelData?.thresholds || DEFAULT_THRESHOLDS;
+  const metricLabel = panelData?.metric_label || "Índice de Calcificação";
 
   const rows = useMemo(() => {
-    const mapped = MOCK_PATIENTS.map((p) => {
-      // ✅ valores RAW (para cálculos e alertas)
-      const valuesRaw = p.exams.map((e) => e.value);
-      const lastValueRaw = valuesRaw[valuesRaw.length - 1] ?? 0;
-
-      // ✅ valores DISPLAY (só para UI)
-      const valuesDisplay = valuesRaw.map(toDisplayValue);
-      const lastValueDisplay = toDisplayValue(lastValueRaw);
-
-      const rateMonthlyPct = computeRatePercent(p.exams, "monthly");
-      const rateAnnualPct = computeRatePercent(p.exams, "annual");
-      const trend = computeTrend(p.exams);
-
-      const alertLevel = getAlertLevel({
-        rateMonthlyPct,
-        rateAnnualPct,
-        lastValue: lastValueRaw, // ✅ RAW
-        thresholds, // ✅ RAW
-      });
-
+    const sourcePatients = panelData?.patients || [];
+    const mapped = sourcePatients.map((patient) => {
+      const exams = patient.timeline?.exams || [];
+      const comparableExams = exams.filter((exam) => exam.is_comparable && exam.vo_percentage !== null);
+      const evolution = patient.timeline?.evolution || {};
+      const rateMonthlyPct = evolution.monthly_rate_percentage ?? null;
+      const rateAnnualPct = evolution.annual_rate_percentage ?? null;
       const rateToShow = period === "annual" ? rateAnnualPct : rateMonthlyPct;
+      const alertLevel =
+        evolution.priority?.level === "high"
+          ? "critical"
+          : evolution.priority?.level === "watch"
+          ? "warning"
+          : "none";
 
       return {
-        ...p,
-        valuesRaw,
-        lastValueRaw,
-        valuesDisplay,
-        lastValueDisplay,
+        ...patient,
+        comparableExams,
+        values: comparableExams.map((exam) => exam.vo_percentage),
+        lastValue: evolution.latest_vo_percentage ?? null,
         rateMonthlyPct,
         rateAnnualPct,
         rateToShow,
-        trend,
+        trend: evolution.trend || {
+          direction: "insufficient_data",
+          label: "Dados insuficientes",
+          score: 0,
+        },
+        priority: evolution.priority || {
+          level: "normal",
+          label: "Sem prioridade adicional",
+          sort_weight: 0,
+        },
+        suggestions: evolution.suggestions || [],
         alertLevel,
+        firstComparableDate: comparableExams[0]?.exam_date || null,
+        lastComparableDate: comparableExams[comparableExams.length - 1]?.exam_date || patient.last_exam_date,
       };
     });
 
-    const q = search.trim().toLowerCase();
-    let filtered = mapped.filter((r) => {
-      if (!q) return true;
-      return r.name.toLowerCase().includes(q) || r.id.toLowerCase().includes(q);
+    const query = search.trim().toLowerCase();
+    let filtered = mapped.filter((row) => {
+      if (!query) return true;
+      return row.name.toLowerCase().includes(query) || String(row.id).toLowerCase().includes(query);
     });
 
-    if (onlyAlerts) filtered = filtered.filter((r) => r.alertLevel !== "none");
+    if (onlyAlerts) {
+      filtered = filtered.filter((row) => row.alertLevel !== "none");
+    }
 
-    const dir = sortDir === "asc" ? 1 : -1;
+    const direction = sortDir === "asc" ? 1 : -1;
 
-    filtered.sort((a, b) => {
-      if (sortBy === "name") return a.name.localeCompare(b.name) * dir;
-      if (sortBy === "lastExam") return (parseISODate(a.lastExamDate) - parseISODate(b.lastExamDate)) * dir;
-      return (a.rateToShow - b.rateToShow) * dir;
+    filtered.sort((left, right) => {
+      if (sortBy === "name") return left.name.localeCompare(right.name) * direction;
+      if (sortBy === "lastExam") {
+        return (parseISODate(left.last_exam_date) - parseISODate(right.last_exam_date)) * direction;
+      }
+      if (sortBy === "rate") {
+        return ((left.rateToShow ?? -Infinity) - (right.rateToShow ?? -Infinity)) * direction;
+      }
+
+      const priorityDelta =
+        (left.priority?.sort_weight ?? 0) - (right.priority?.sort_weight ?? 0);
+      if (priorityDelta !== 0) return priorityDelta * direction;
+
+      return ((left.rateToShow ?? -Infinity) - (right.rateToShow ?? -Infinity)) * direction;
     });
 
     return filtered;
-  }, [period, sortBy, sortDir, search, onlyAlerts, thresholds]);
+  }, [panelData, period, search, onlyAlerts, sortBy, sortDir]);
 
   const summary = useMemo(() => {
-    if (!rows.length) return { avgRate: 0, critical: 0, warning: 0, topName: "—" };
+    if (!rows.length) {
+      return {
+        avgRate: null,
+        critical: 0,
+        warning: 0,
+        topName: "—",
+        suggested: 0,
+      };
+    }
 
-    const avgRate = rows.reduce((acc, r) => acc + r.rateToShow, 0) / rows.length;
-    const critical = rows.filter((r) => r.alertLevel === "critical").length;
-    const warning = rows.filter((r) => r.alertLevel === "warning").length;
+    const validRates = rows
+      .map((row) => row.rateToShow)
+      .filter((value) => value !== null && value !== undefined && !Number.isNaN(value));
 
-    const top = [...rows].sort((a, b) => b.rateToShow - a.rateToShow)[0];
+    const avgRate = validRates.length
+      ? validRates.reduce((acc, value) => acc + value, 0) / validRates.length
+      : null;
 
-    return { avgRate, critical, warning, topName: top?.name ?? "—" };
+    const critical = rows.filter((row) => row.alertLevel === "critical").length;
+    const warning = rows.filter((row) => row.alertLevel === "warning").length;
+    const suggested = rows.filter((row) => row.suggestions.length > 0).length;
+
+    const top = [...rows].sort((left, right) => (right.rateToShow ?? -Infinity) - (left.rateToShow ?? -Infinity))[0];
+
+    return {
+      avgRate,
+      critical,
+      warning,
+      topName: top?.name ?? "—",
+      suggested,
+    };
   }, [rows]);
 
-  const critRate = period === "annual" ? thresholds.annualCrit : thresholds.monthlyCrit;
+  const criticalThreshold = period === "annual" ? thresholds.annual_high : thresholds.monthly_high;
 
   return (
     <MainLayout pageTitle="Painel Temporal - CalciVision">
       <div className="p-6">
-        {/* Header */}
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
             <h1 className="text-3xl font-semibold text-gray-dark">Painel Temporal</h1>
-            <p className="text-gray-medium mt-1 max-w-3xl">
-              Visualização da evolução da variável objetiva ao longo do tempo. Protótipo para comparar exames,
-              calcular taxas de progressão e sinalizar alertas clínicos.
+            <p className="mt-1 max-w-3xl text-gray-medium">
+              Evolução longitudinal dos exames por paciente, com histórico cronológico,
+              métricas comparáveis e estrutura pronta para tendência, prioridade e sugestões.
             </p>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-            <div className="relative">
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Pesquisar por nome ou ID…"
-                className="w-full sm:w-[320px] rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-gray-dark outline-none focus:border-green"
-              />
-            </div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Pesquisar por nome ou ID…"
+              className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-gray-dark outline-none focus:border-green sm:w-[320px]"
+            />
 
             <label className="inline-flex items-center gap-2 text-gray-dark">
               <input
                 type="checkbox"
                 checked={onlyAlerts}
-                onChange={(e) => setOnlyAlerts(e.target.checked)}
+                onChange={(event) => setOnlyAlerts(event.target.checked)}
                 className="h-4 w-4 accent-green"
               />
-              <span className="text-sm">Só com alertas</span>
+              <span className="text-sm">Só com prioridade</span>
             </label>
           </div>
         </div>
 
-        {/* Summary cards */}
-        <div className="mt-6 grid grid-cols-1 lg:grid-cols-4 gap-4">
-          <div className="rounded-2xl bg-white border border-gray-200 p-4">
-            <p className="text-sm text-gray-medium">Evolução geral</p>
-            <p className="mt-1 text-2xl font-semibold text-gray-dark">
-              {formatPct(summary.avgRate)}
-              <span className="text-sm font-medium text-gray-medium ml-2">/ {period === "annual" ? "ano" : "mês"}</span>
+        {loading ? (
+          <div className="mt-6">
+            <LoadingState />
+          </div>
+        ) : error ? (
+          <div className="mt-6 rounded-2xl border border-red/20 bg-red/5 p-6 text-center">
+            <p className="text-sm font-semibold text-red">Painel temporal indisponível</p>
+            <p className="mt-2 text-sm text-gray-700">{error}</p>
+          </div>
+        ) : !rows.length ? (
+          <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 text-center">
+            <p className="text-sm font-semibold text-gray-dark">Sem histórico longitudinal disponível</p>
+            <p className="mt-2 text-sm text-gray-medium">
+              Ainda não existem exames suficientes para construir a evolução temporal dos pacientes.
             </p>
-            <p className="mt-2 text-sm text-gray-medium">Média da progressão (protótipo).</p>
           </div>
-
-          <div className="rounded-2xl bg-white border border-gray-200 p-4">
-            <p className="text-sm text-gray-medium">Alertas</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <Chip tone="critical">❗ Críticos: {summary.critical}</Chip>
-              <Chip tone="warning">⚠ Avisos: {summary.warning}</Chip>
-            </div>
-            <p className="mt-2 text-sm text-gray-medium">Sinalização quando a progressão ultrapassa limiares.</p>
-          </div>
-
-          <div className="rounded-2xl bg-white border border-gray-200 p-4">
-            <p className="text-sm text-gray-medium">Maior progressão</p>
-            <p className="mt-1 text-2xl font-semibold text-gray-dark">{summary.topName}</p>
-            <p className="mt-2 text-sm text-gray-medium">Doente com a taxa mais elevada no período selecionado.</p>
-          </div>
-
-          <div className="rounded-2xl bg-white border border-gray-200 p-4">
-            <p className="text-sm text-gray-medium">Previsão</p>
-            <p className="mt-1 text-2xl font-semibold text-gray-dark">Tendência</p>
-            <p className="mt-2 text-sm text-gray-medium">Placeholder para IA/ML (ex.: regressão, séries temporais).</p>
-          </div>
-        </div>
-
-        {/* Controls */}
-        <div className="mt-6 rounded-2xl bg-green-light border border-gray-200 p-4">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <div className="flex flex-wrap gap-2 items-center">
-              <span className="text-sm text-gray-medium">Taxa:</span>
-              <div className="inline-flex rounded-xl border border-gray-200 bg-white overflow-hidden">
-                <button
-                  onClick={() => setPeriod("monthly")}
-                  className={`px-4 py-2 text-sm font-medium ${
-                    period === "monthly" ? "bg-green text-white" : "text-gray-dark hover:bg-green-pale"
-                  }`}
-                >
-                  Mensal
-                </button>
-                <button
-                  onClick={() => setPeriod("annual")}
-                  className={`px-4 py-2 text-sm font-medium ${
-                    period === "annual" ? "bg-green text-white" : "text-gray-dark hover:bg-green-pale"
-                  }`}
-                >
-                  Anual
-                </button>
+        ) : (
+          <>
+            <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-4">
+              <div className="rounded-2xl border border-gray-200 bg-white p-4">
+                <p className="text-sm text-gray-medium">Evolução geral</p>
+                <p className="mt-1 text-2xl font-semibold text-gray-dark">
+                  {formatPct(summary.avgRate)}
+                  <span className="ml-2 text-sm font-medium text-gray-medium">
+                    / {period === "annual" ? "ano" : "mês"}
+                  </span>
+                </p>
+                <p className="mt-2 text-sm text-gray-medium">Média da progressão dos pacientes comparáveis.</p>
               </div>
 
-              <span className="text-sm text-gray-medium ml-2">Ordenar por:</span>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-dark outline-none focus:border-green"
-              >
-                <option value="rate">Prioridade clínica</option>
-                <option value="lastExam">Data do último exame</option>
-                <option value="name">Nome</option>
-              </select>
+              <div className="rounded-2xl border border-gray-200 bg-white p-4">
+                <p className="text-sm text-gray-medium">Prioridade clínica</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Chip tone="critical">Críticos: {summary.critical}</Chip>
+                  <Chip tone="warning">Acompanhar: {summary.warning}</Chip>
+                </div>
+                <p className="mt-2 text-sm text-gray-medium">Baseado no valor mais recente e na taxa de evolução.</p>
+              </div>
 
-              <select
-                value={sortDir}
-                onChange={(e) => setSortDir(e.target.value)}
-                className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-dark outline-none focus:border-green"
-              >
-                <option value="desc">Descendente</option>
-                <option value="asc">Ascendente</option>
-              </select>
+              <div className="rounded-2xl border border-gray-200 bg-white p-4">
+                <p className="text-sm text-gray-medium">Maior progressão</p>
+                <p className="mt-1 text-2xl font-semibold text-gray-dark">{summary.topName}</p>
+                <p className="mt-2 text-sm text-gray-medium">Paciente com a maior taxa no período selecionado.</p>
+              </div>
+
+              <div className="rounded-2xl border border-gray-200 bg-white p-4">
+                <p className="text-sm text-gray-medium">Sugestões preparadas</p>
+                <p className="mt-1 text-2xl font-semibold text-gray-dark">{summary.suggested}</p>
+                <p className="mt-2 text-sm text-gray-medium">Pacientes com próxima ação sugerida pela estrutura temporal.</p>
+              </div>
             </div>
 
-            <div className="flex flex-wrap gap-2 items-center justify-start lg:justify-end">
-              <Chip tone="neutral">
-                Limiar aviso: {period === "annual" ? thresholds.annualWarn : thresholds.monthlyWarn}%
-              </Chip>
-              <Chip tone="neutral">
-                Limiar crítico: {period === "annual" ? thresholds.annualCrit : thresholds.monthlyCrit}%
-              </Chip>
-
-              {/* ✅ Mostra limiar de valor em escala, mas lógica continua RAW */}
-              <Chip tone="neutral">Valor crítico: ≥ {formatDisplayValue(toDisplayValue(thresholds.valueCrit))}</Chip>
-            </div>
-          </div>
-        </div>
-
-        {/* Table */}
-        <div className="mt-6 rounded-2xl bg-white border border-gray-200 overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-dark">Doentes e evolução</h2>
-            <span className="text-sm text-gray-medium">{rows.length} registos</span>
-          </div>
-
-          <div className="overflow-auto">
-            <table className="min-w-[1050px] w-full">
-              <thead className="bg-green-light">
-                <tr className="text-left">
-                  <th className="px-4 py-3 text-sm font-semibold text-gray-dark">Doente</th>
-                  <th className="px-4 py-3 text-sm font-semibold text-gray-dark">Evolução</th>
-                  <th className="px-4 py-3 text-sm font-semibold text-gray-dark">Variável objetiva (último)</th>
-                  <th className="px-4 py-3 text-sm font-semibold text-gray-dark">
-                    Taxa {period === "annual" ? "anual" : "mensal"}
-                  </th>
-                  <th className="px-4 py-3 text-sm font-semibold text-gray-dark">Tendência</th>
-                  <th className="px-4 py-3 text-sm font-semibold text-gray-dark">Alertas</th>
-                  <th className="px-4 py-3 text-sm font-semibold text-gray-dark">Último exame</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {rows.map((r) => {
-                  const urgent = r.alertLevel === "critical" || r.rateToShow >= critRate;
-
-                  const rowBg =
-                    r.alertLevel === "critical"
-                      ? "bg-red-50"
-                      : r.alertLevel === "warning"
-                      ? "bg-yellow-50"
-                      : "bg-white";
-
-                  return (
-                    <tr
-                      key={r.id}
-                      className={`border-t border-gray-100 ${rowBg} ${
-                        urgent ? "shadow-[inset_4px_0_0_0_rgba(24,120,76,0.55)]" : ""
+            <div className="mt-6 rounded-2xl border border-gray-200 bg-green-light p-4">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm text-gray-medium">Taxa:</span>
+                  <div className="inline-flex overflow-hidden rounded-xl border border-gray-200 bg-white">
+                    <button
+                      onClick={() => setPeriod("monthly")}
+                      className={`px-4 py-2 text-sm font-medium ${
+                        period === "monthly" ? "bg-green text-white" : "text-gray-dark hover:bg-green-pale"
                       }`}
                     >
-                      <td className="px-4 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-xl bg-green-pale grid place-items-center text-green-dark font-semibold">
-                            {r.name.split(" ").map((s) => s[0]).slice(0, 2).join("")}
-                          </div>
-                          <div>
-                            <p className="font-semibold text-gray-dark leading-5">{r.name}</p>
-                            <p className="text-sm text-gray-medium">
-                              {r.id} · {r.sex} · {r.birthYear}
-                            </p>
-                          </div>
-                        </div>
-                      </td>
+                      Mensal
+                    </button>
+                    <button
+                      onClick={() => setPeriod("annual")}
+                      className={`px-4 py-2 text-sm font-medium ${
+                        period === "annual" ? "bg-green text-white" : "text-gray-dark hover:bg-green-pale"
+                      }`}
+                    >
+                      Anual
+                    </button>
+                  </div>
 
-                      <td className="px-4 py-4">
-                        <div className="flex items-center gap-3">
-                          {/* ✅ Sparkline com valores DISPLAY */}
-                          <Sparkline values={r.valuesDisplay} />
-                          <div className="text-sm text-gray-medium">
-                            <p className="text-gray-dark font-medium">{r.objectiveVarName}</p>
-                            <p>
-                              {r.exams[0]?.date} → {r.exams[r.exams.length - 1]?.date}
-                            </p>
-                          </div>
-                        </div>
-                      </td>
+                  <span className="ml-2 text-sm text-gray-medium">Ordenar por:</span>
+                  <select
+                    value={sortBy}
+                    onChange={(event) => setSortBy(event.target.value)}
+                    className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-dark outline-none focus:border-green"
+                  >
+                    <option value="priority">Prioridade clínica</option>
+                    <option value="rate">Taxa de progressão</option>
+                    <option value="lastExam">Data do último exame</option>
+                    <option value="name">Nome</option>
+                  </select>
 
-                      <td className="px-4 py-4">
-                        {/* ✅ Mostra último valor DISPLAY, sem afectar alertas */}
-                        <p className="text-gray-dark font-semibold">
-                          {formatDisplayValue(r.lastValueDisplay)}
-                        </p>
-                        <p className="text-sm text-gray-medium">{r.valuesRaw.length} exames</p>
-                      </td>
+                  <select
+                    value={sortDir}
+                    onChange={(event) => setSortDir(event.target.value)}
+                    className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-dark outline-none focus:border-green"
+                  >
+                    <option value="desc">Descendente</option>
+                    <option value="asc">Ascendente</option>
+                  </select>
+                </div>
 
-                      <td className="px-4 py-4">
-                        <p className="text-gray-dark font-semibold">{formatPct(r.rateToShow)}</p>
-                        <p className="text-sm text-gray-medium">
-                          (mensal: {formatPct(r.rateMonthlyPct)} · anual: {formatPct(r.rateAnnualPct)})
-                        </p>
-                      </td>
+                <div className="flex flex-wrap items-center gap-2 justify-start lg:justify-end">
+                  <Chip tone="neutral">
+                    Aviso: {period === "annual" ? thresholds.annual_warn : thresholds.monthly_warn}%
+                  </Chip>
+                  <Chip tone="neutral">
+                    Crítico: {period === "annual" ? thresholds.annual_high : thresholds.monthly_high}%
+                  </Chip>
+                  <Chip tone="neutral">VO alta: ≥ {formatValue(thresholds.value_high)}</Chip>
+                </div>
+              </div>
+            </div>
 
-                      <td className="px-4 py-4">
-                        <div className="flex flex-col gap-2">
-                          <Chip tone={r.trend.score > 0 ? "warning" : r.trend.score < 0 ? "good" : "neutral"}>
-                            {r.trend.score > 0 ? "↗" : r.trend.score < 0 ? "↘" : "→"} {r.trend.label}
-                          </Chip>
-                          <p className="text-xs text-gray-medium">(placeholder para modelo preditivo)</p>
-                        </div>
-                      </td>
+            <div className="mt-6 overflow-hidden rounded-2xl border border-gray-200 bg-white">
+              <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+                <h2 className="text-lg font-semibold text-gray-dark">Pacientes e evolução</h2>
+                <span className="text-sm text-gray-medium">{rows.length} registos</span>
+              </div>
 
-                      <td className="px-4 py-4">
-                        {r.alertLevel === "critical" ? (
-                          <div className="flex flex-col gap-1">
-                            <Chip tone="critical">❗ Progressão alarmante</Chip>
-                            <span className="text-xs text-gray-medium">Notificar equipa clínica (protótipo)</span>
-                          </div>
-                        ) : r.alertLevel === "warning" ? (
-                          <div className="flex flex-col gap-1">
-                            <Chip tone="warning">⚠ Atenção</Chip>
-                            <span className="text-xs text-gray-medium">Rever em breve (protótipo)</span>
-                          </div>
-                        ) : (
-                          <Chip tone="neutral">Sem alertas</Chip>
-                        )}
-                      </td>
-
-                      <td className="px-4 py-4">
-                        <p className="text-gray-dark font-medium">{r.lastExamDate}</p>
-                        <p className="text-sm text-gray-medium">Último registo</p>
-                      </td>
+              <div className="overflow-auto">
+                <table className="min-w-[1120px] w-full">
+                  <thead className="bg-green-light">
+                    <tr className="text-left">
+                      <th className="px-4 py-3 text-sm font-semibold text-gray-dark">Paciente</th>
+                      <th className="px-4 py-3 text-sm font-semibold text-gray-dark">
+                        <span className="inline-flex items-center gap-2">
+                          Evolução
+                          <InfoTooltip
+                            content={`${metricLabel}: série cronológica dos exames comparáveis do paciente. A partir desta sequência, o sistema calcula evolução, tendência, prioridade e sugestões.`}
+                          />
+                        </span>
+                      </th>
+                      <th className="px-4 py-3 text-sm font-semibold text-gray-dark">Variável objetiva (último)</th>
+                      <th className="px-4 py-3 text-sm font-semibold text-gray-dark">
+                        Taxa {period === "annual" ? "anual" : "mensal"}
+                      </th>
+                      <th className="px-4 py-3 text-sm font-semibold text-gray-dark">Tendência</th>
+                      <th className="px-4 py-3 text-sm font-semibold text-gray-dark">Prioridade</th>
+                      <th className="px-4 py-3 text-sm font-semibold text-gray-dark">Último exame</th>
                     </tr>
-                  );
-                })}
+                  </thead>
 
-                {rows.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-10 text-center text-gray-medium">
-                      Não foram encontrados resultados.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>        
+                  <tbody>
+                    {rows.map((row) => {
+                      const highlightRow =
+                        row.alertLevel === "critical" || (row.rateToShow ?? -Infinity) >= criticalThreshold;
+
+                      const rowBg =
+                        row.alertLevel === "critical"
+                          ? "bg-red-50"
+                          : row.alertLevel === "warning"
+                          ? "bg-yellow-50"
+                          : "bg-white";
+
+                      return (
+                        <tr
+                          key={row.id}
+                          className={`border-t border-gray-100 ${rowBg} ${
+                            highlightRow ? "shadow-[inset_4px_0_0_0_rgba(24,120,76,0.55)]" : ""
+                          }`}
+                        >
+                          <td className="px-4 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="grid h-10 w-10 place-items-center rounded-xl bg-green-pale font-semibold text-green-dark">
+                                {row.name.split(" ").map((word) => word[0]).slice(0, 2).join("")}
+                              </div>
+                              <div>
+                                <p className="leading-5 font-semibold text-gray-dark">{row.name}</p>
+                                <p className="text-sm text-gray-medium">
+                                  {row.id} · {row.sex} · {row.birth_year || "—"}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="px-4 py-4">
+                            <div className="flex items-center gap-3">
+                              <Sparkline values={row.values} />
+                              <div className="text-sm text-gray-medium">
+                                <p className="font-medium text-gray-dark">
+                                  {row.firstComparableDate
+                                    ? `${formatExamDate(row.firstComparableDate)} → ${formatExamDate(row.lastComparableDate)}`
+                                    : "Sem exames comparáveis"}
+                                </p>
+                                <p>
+                                  {row.comparable_exam_count}/{row.exam_count} exames comparáveis
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="px-4 py-4">
+                            <p className="font-semibold text-gray-dark">{formatValue(row.lastValue)}</p>
+                            <p className="text-sm text-gray-medium">
+                              {row.lastValue !== null ? "Último valor comparável" : "Sem VO validada"}
+                            </p>
+                          </td>
+
+                          <td className="px-4 py-4">
+                            <p className="font-semibold text-gray-dark">{formatPct(row.rateToShow)}</p>
+                            <p className="text-sm text-gray-medium">
+                              mensal: {formatPct(row.rateMonthlyPct)} · anual: {formatPct(row.rateAnnualPct)}
+                            </p>
+                          </td>
+
+                          <td className="px-4 py-4">
+                            <div className="flex flex-col gap-2">
+                              <Chip
+                                tone={
+                                  row.trend.score > 0
+                                    ? "warning"
+                                    : row.trend.score < 0
+                                    ? "good"
+                                    : "neutral"
+                                }
+                              >
+                                {row.trend.score > 0 ? "↗" : row.trend.score < 0 ? "↘" : "→"} {row.trend.label}
+                              </Chip>
+                              <p className="text-xs text-gray-medium">
+                                {row.comparable_exam_count >= 2
+                                  ? `${row.timeline?.evolution?.intervals?.length || 0} intervalo(s) comparável(is)`
+                                  : "São precisos pelo menos dois exames com VO"}
+                              </p>
+                            </div>
+                          </td>
+
+                          <td className="px-4 py-4">
+                            <div className="flex flex-col gap-2">
+                              <Chip
+                                tone={
+                                  row.alertLevel === "critical"
+                                    ? "critical"
+                                    : row.alertLevel === "warning"
+                                    ? "warning"
+                                    : "neutral"
+                                }
+                              >
+                                {row.priority.label}
+                              </Chip>
+                              <p className="text-xs text-gray-medium">
+                                {row.suggestions[0] || "Sem recomendação adicional."}
+                              </p>
+                            </div>
+                          </td>
+
+                          <td className="px-4 py-4">
+                            <p className="font-medium text-gray-dark">{formatExamDate(row.last_exam_date)}</p>
+                            <p className="text-sm text-gray-medium">Último registo cronológico</p>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </MainLayout>
   );

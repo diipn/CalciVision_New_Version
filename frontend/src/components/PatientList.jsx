@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api, { deletePatient } from '../api';
 import AlertDialogMenu from './AlertDialogMenu';
+import { formatExamDate, formatVo, getRiskBadge } from '../utils/examComparison';
 
 export default function PatientList({ patients, defaultPatient, reloadTable }) {
   const [rowsPerView, setRowsPerView] = useState(10);
@@ -144,6 +145,10 @@ function PatientRow({ patient, defaultState, reloadTable }) {
 function EchocardiogramsTable({ patient, reloadTable }) {
   const navigate = useNavigate();
   const [selectedExams, setSelectedExams] = useState([]);
+  const [selectionFeedback, setSelectionFeedback] = useState({
+    type: 'info',
+    message: 'Selecione dois exames para abrir a comparação.',
+  });
 
   const reportsByExam = useMemo(() => {
     const map = {};
@@ -158,13 +163,54 @@ function EchocardiogramsTable({ patient, reloadTable }) {
   const handleToggleExam = (examId) => {
     setSelectedExams((prev) => {
       if (prev.includes(examId)) {
-        return prev.filter((id) => id !== examId);
+        const nextSelected = prev.filter((id) => id !== examId);
+        setSelectionFeedback({
+          type: 'info',
+          message:
+            nextSelected.length === 0
+              ? 'Selecione dois exames para abrir a comparação.'
+              : 'Selecione mais um exame para concluir a comparação.',
+        });
+        return nextSelected;
       }
       if (prev.length >= 2) {
+        setSelectionFeedback({
+          type: 'error',
+          message: 'Pode comparar no máximo dois exames em simultâneo.',
+        });
         return prev;
       }
-      return [...prev, examId];
+
+      const nextSelected = [...prev, examId];
+      setSelectionFeedback({
+        type: 'info',
+        message:
+          nextSelected.length === 2
+            ? 'Dois exames selecionados. Pode abrir a comparação.'
+            : 'Selecione mais um exame para concluir a comparação.',
+      });
+      return nextSelected;
     });
+  };
+
+  const handleCompareClick = () => {
+    if (selectedExams.length === 0) {
+      setSelectionFeedback({
+        type: 'error',
+        message: 'Selecione dois exames primeiro para abrir a comparação.',
+      });
+      return;
+    }
+
+    if (selectedExams.length === 1) {
+      setSelectionFeedback({
+        type: 'error',
+        message: 'Falta selecionar mais um exame para comparar.',
+      });
+      return;
+    }
+
+    navigate(`/patients/${patient.id}/compare/${selectedExams[0]}/${selectedExams[1]}`);
   };
 
   const handleDeleteEchocardiogram = async (echo) => {
@@ -178,20 +224,38 @@ function EchocardiogramsTable({ patient, reloadTable }) {
 
   return (
     <div>
-      <div className='flex items-center justify-between mb-3 text-sm text-gray-medium-dark'>
-        <span>Selecione dois exames para comparar.</span>
+      <div className='mb-3 flex flex-wrap items-center justify-between gap-3'>
+        <div>
+          <p className='text-sm font-medium text-gray-dark'>Comparação de exames</p>
+          <p className='text-sm text-gray-medium-dark'>
+            {selectedExams.length === 0
+              ? 'Selecione dois exames do mesmo doente para comparar.'
+              : `${selectedExams.length} exame(s) selecionado(s) para comparação.`}
+          </p>
+        </div>
         <button
-          className='bg-green-dark text-white px-3 py-1 rounded disabled:opacity-50'
-          onClick={() => navigate(`/patients/${patient.id}/compare/${selectedExams[0]}/${selectedExams[1]}`)}
-          disabled={selectedExams.length !== 2}
+          className='rounded-lg bg-green-dark px-3 py-2 text-sm font-semibold text-white'
+          onClick={handleCompareClick}
         >
           Comparar exames
         </button>
       </div>
+
+      <div
+        role={selectionFeedback.type === 'error' ? 'alert' : 'status'}
+        className={`mb-4 rounded-lg border px-4 py-3 text-sm ${
+          selectionFeedback.type === 'error'
+            ? 'border-red/30 bg-red/5 text-red'
+            : 'border-green-pale bg-white text-gray-medium-dark'
+        }`}
+      >
+        {selectionFeedback.message}
+      </div>
+
       <table className='table-fixed w-full border-collapse'>
         <thead>
           <tr>
-            <th className="w-14 px-4 py-1 border-b-2" aria-label="Selecionar para comparar" />
+            <th className="w-16 px-4 py-1 text-left truncate border-b-2">Comparar</th>
             <th className="w-1/4 px-4 py-1 text-left truncate border-b-2">Exame</th>
             <th className="w-1/6 px-4 py-1 text-left truncate border-b-2">Data</th>
             <th className="w-1/8 px-4 py-1 text-left truncate border-b-2">
@@ -221,18 +285,19 @@ function EchocardiogramsTable({ patient, reloadTable }) {
                     type="checkbox"
                     checked={selectedExams.includes(echo.id)}
                     onChange={() => handleToggleExam(echo.id)}
-                    disabled={!selectedExams.includes(echo.id) && selectedExams.length >= 2}
                     aria-label={`Selecionar ${echo.description} para comparação`}
                   />
                 </td>
                 <td className="px-4 py-1"><strong>{echo.description}</strong></td>
-                <td className="px-4 py-1"><em>{new Date(echo.date || echo.uploaded_at).toLocaleString('pt-PT', { day: '2-digit', month: '2-digit', year: 'numeric' })}</em></td>
-                <td className="px-4 py-1">{echo.vo !== undefined ? `${Math.round(echo.vo * 100)}%` : '—'}</td>
+                <td className="px-4 py-1"><em>{formatExamDate(echo.date || echo.uploaded_at)}</em></td>
+                <td className="px-4 py-1">{formatVo(echo.vo)}</td>
                 <td className="px-4 py-1">
-                  {risk && (
+                  {risk ? (
                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${risk.className}`}>
                       {risk.label}
                     </span>
+                  ) : (
+                    <span>—</span>
                   )}
                 </td>
                 <td className="px-4 py-1">
@@ -241,7 +306,7 @@ function EchocardiogramsTable({ patient, reloadTable }) {
                       className='text-green-dark underline'
                       onClick={() => window.open(report.report_url)}
                     >
-                      {report.pdf_name || 'Relatório.pdf'}
+                      {report.pdf_name || 'Ver relatório'}
                     </button>
                   ) : (
                     <span>—</span>
@@ -274,14 +339,3 @@ function EchocardiogramsTable({ patient, reloadTable }) {
     </div>
   );
 }
-
-const getRiskBadge = (vo) => {
-  if (vo === undefined || vo === null) return null;
-  if (vo < 0.33) {
-    return { label: 'Baixo', className: 'bg-green-600 text-white' };
-  }
-  if (vo < 0.66) {
-    return { label: 'Médio', className: 'bg-orange-500 text-white' };
-  }
-  return { label: 'Alto', className: 'bg-red text-white' };
-};

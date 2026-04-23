@@ -15,6 +15,7 @@ export default function ManualAnnotationSetup() {
   const [patients, setPatients] = useState([]);
   const [selectedPatientId, setSelectedPatientId] = useState("");
   const [selectedEchoId, setSelectedEchoId] = useState("");
+  const [analysisSequence, setAnalysisSequence] = useState([]);
 
   // DEFAULT: "upload" (Carregar novo ecocardiograma)
   const [echoMode, setEchoMode] = useState("upload"); // "upload" | "existing"
@@ -47,6 +48,7 @@ export default function ManualAnnotationSetup() {
     setUploadCount(0);
     setUploadError("");
     setUploadSuccess(false);
+    setAnalysisSequence([]);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -66,6 +68,7 @@ export default function ManualAnnotationSetup() {
     if (!selectedPatientId || uploading) return;
     setEchoMode(mode);
     setSelectedEchoId("");
+    setAnalysisSequence([]);
     setUploadError("");
     setUploadSuccess(false);
     if (mode === "existing") {
@@ -81,6 +84,7 @@ export default function ManualAnnotationSetup() {
     if (!files.length) return;
 
     setSelectedFiles((prev) => [...prev, ...files]);
+    setAnalysisSequence([]);
     setUploadError("");
     setSelectedEchoId("");
     setUploadSuccess(false);
@@ -96,6 +100,7 @@ export default function ManualAnnotationSetup() {
       return next;
     });
     setUploadSuccess(false);
+    setAnalysisSequence([]);
     setSelectedEchoId("");
     setUploadCount(0);
   };
@@ -142,8 +147,14 @@ export default function ManualAnnotationSetup() {
         throw new Error("Não foi possível obter o ID do ecocardiograma.");
       }
 
+      const nextSequence =
+        Array.isArray(newExam?.echo_ids) && newExam.echo_ids.length > 0
+          ? newExam.echo_ids.map((id) => String(id))
+          : [String(echoIdFromResponse)];
+
       setUploadCount(files.length);
-      setSelectedEchoId(echoIdFromResponse);
+      setSelectedEchoId(nextSequence[0]);
+      setAnalysisSequence(nextSequence);
       setUploadSuccess(true);
       setSelectedFiles([]);
 
@@ -278,7 +289,9 @@ export default function ManualAnnotationSetup() {
                           name="echocardiogram"
                           className="w-full max-w-md rounded-md border-2 border-green-dark bg-white px-4 py-2"
                           onChange={(event) => {
-                            setSelectedEchoId(event.target.value);
+                            const nextEchoId = event.target.value;
+                            setSelectedEchoId(nextEchoId);
+                            setAnalysisSequence(nextEchoId ? [nextEchoId] : []);
                             setUploadSuccess(false);
                           }}
                           value={selectedEchoId}
@@ -392,6 +405,11 @@ export default function ManualAnnotationSetup() {
                           <p className="font-semibold">
                             {uploadCount} ficheiros carregados com sucesso
                           </p>
+                          {analysisSequence.length > 1 && (
+                            <p className="mt-1 text-xs text-gray-500">
+                              Os ecocardiogramas serão abertos pela mesma ordem em que foram carregados.
+                            </p>
+                          )}
                         </div>
                       )}
                     </div>
@@ -402,9 +420,15 @@ export default function ManualAnnotationSetup() {
 
             <div className="flex justify-end">
               <button
-                onClick={() =>
-                  navigate(`/analyse_aortic_valve/${selectedPatientId}/${selectedEchoId}`)
-                }
+                onClick={() => {
+                  const search =
+                    analysisSequence.length > 1
+                      ? `?sequence=${analysisSequence.join(",")}`
+                      : "";
+                  navigate(
+                    `/analyse_aortic_valve/${selectedPatientId}/${selectedEchoId}${search}`
+                  );
+                }}
                 disabled={!canProceed}
                 className={`rounded-lg px-6 py-2 text-white ${
                   canProceed ? "bg-green-dark" : "bg-gray-medium"

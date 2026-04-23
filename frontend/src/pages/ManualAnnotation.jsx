@@ -1,10 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import MainLayout from '../layouts/MainLayout';
 import AnnotationTool from '../components/AnnotationTool';
 import AnalysisWizard from '../components/AnalysisWizard';
 import FrameNavigator from '../components/FrameNavigator';
-import { useParams } from 'react-router-dom';
-import { useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import api, { getExamSettings, updateExamSettings } from '../api';
 import { useUnsavedStore } from '../store/useUnsavedStore';
 import { defaultImageSettings } from '../constants';
@@ -27,7 +26,63 @@ export default function ManualAnnotation() {
   const [exam, setExam] = useState(null);
   const { patientId, echoId } = useParams();
   const navigate = useNavigate();
-  const { setUnsavedChanges } = useUnsavedStore();
+  const [searchParams] = useSearchParams();
+  const { hasUnsavedChanges, setUnsavedChanges } = useUnsavedStore();
+
+  const analysisSequence = useMemo(() => {
+    const rawSequence = searchParams.get('sequence');
+    const parsedSequence = rawSequence
+      ? rawSequence
+          .split(',')
+          .map((value) => value.trim())
+          .filter(Boolean)
+      : [];
+
+    const uniqueSequence = parsedSequence.filter(
+      (value, index) => parsedSequence.indexOf(value) === index
+    );
+
+    if (!uniqueSequence.includes(String(echoId))) {
+      uniqueSequence.unshift(String(echoId));
+    }
+
+    return uniqueSequence;
+  }, [searchParams, echoId]);
+
+  const currentExamSequenceIndex = Math.max(
+    0,
+    analysisSequence.findIndex((value) => value === String(echoId))
+  );
+  const hasPreviousExam = currentExamSequenceIndex > 0;
+  const hasNextExam = currentExamSequenceIndex < analysisSequence.length - 1;
+
+  const navigateToSequenceExam = (sequenceIndex) => {
+    const nextEchoId = analysisSequence[sequenceIndex];
+    if (!nextEchoId || nextEchoId === String(echoId)) return;
+
+    if (hasUnsavedChanges) {
+      const confirmLeave = window.confirm(
+        'Tens alterações por guardar neste exame. Desejas avançar mesmo assim?'
+      );
+      if (!confirmLeave) return;
+      setUnsavedChanges(false);
+    }
+
+    const search =
+      analysisSequence.length > 1 ? `?sequence=${analysisSequence.join(',')}` : '';
+    navigate(`/analyse_aortic_valve/${patientId}/${nextEchoId}${search}`);
+  };
+
+  useEffect(() => {
+    setFrames([]);
+    setRects([]);
+    setCurrentFrame(0);
+    setCalcification([]);
+    setPredictionHistory([]);
+    setPredictedValveBoxes([]);
+    setCalcificationStatus(null);
+    setExam(null);
+  }, [echoId]);
 
   useEffect(() => {
     let isActive = true;
@@ -78,17 +133,16 @@ export default function ManualAnnotation() {
         );
 
         const formattedPredictedValveBoxes = data.map((frame) => {
-          if (!frame.data?.length) return [];
-          return frame.data
-            .filter((rect) => rect.is_annotation_generated)
-            .map((rect) => ({
-              x: rect.x,
-              y: rect.y,
-              width: rect.width,
-              height: rect.height,
-              id: 'prediction',
-              is_annotation_generated: true,
-            }));
+          const generatedRect = frame.data?.find((rect) => rect.is_annotation_generated);
+          if (!generatedRect) return null;
+          return {
+            x: generatedRect.x,
+            y: generatedRect.y,
+            width: generatedRect.width,
+            height: generatedRect.height,
+            id: 'prediction',
+            is_annotation_generated: true,
+          };
         });
 
 
@@ -125,6 +179,7 @@ export default function ManualAnnotation() {
               },
             ];
           }
+          return [];
         });
 
         // Atualiza todos os states ao mesmo tempo
@@ -154,13 +209,13 @@ export default function ManualAnnotation() {
           (savedProgress && (() => {
             try {
               const parsed = JSON.parse(savedProgress);
-              return parsed?.calcification?.[currentFrame];
+              return parsed?.calcification?.[0];
             } catch {
               return null;
             }
-          })()) || formattedCalcification[currentFrame];
+          })()) || formattedCalcification[0];
         if (currentCalc?.binary_classification !== null && currentCalc?.binary_classification !== undefined) {
-          setCalcificationStatus(currentCalc.binary_classification === 1);
+          setCalcificationStatus(Boolean(currentCalc.binary_classification));
         }
         setFramesLoading(false);
       } catch (error) {
@@ -191,6 +246,8 @@ export default function ManualAnnotation() {
       const settings = await getExamSettings(echoId);
       if (settings?.imageSettings) {
         setImageSettings(settings.imageSettings);
+      } else {
+        setImageSettings(defaultImageSettings);
       }
     };
     loadSettings();
@@ -204,6 +261,46 @@ export default function ManualAnnotation() {
 
   return (
     <MainLayout pageTitle={`Anotação da Válvula Aórtica — ${patient?.name || 'CalciVision'}`}>
+      {analysisSequence.length > 1 && (
+        <div className="mb-4 rounded-lg border border-green-pale bg-white px-4 py-3 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Sequência de análise
+              </p>
+              <h2 className="text-base font-semibold text-gray-900">
+                Exame {currentExamSequenceIndex + 1} de {analysisSequence.length}
+              </h2>
+              <p className="text-sm text-gray-600">
+                {exam?.description || `Ecocardiograma ${echoId}`}
+              </p>
+              {hasNextExam && (
+                <p className="mt-1 text-xs text-gray-500">
+                  Após submeter este exame, o próximo abre automaticamente.
+                </p>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="rounded-md border border-green-pale px-3 py-2 text-sm font-semibold text-green-dark disabled:opacity-40"
+                onClick={() => navigateToSequenceExam(currentExamSequenceIndex - 1)}
+                disabled={!hasPreviousExam}
+              >
+                Exame anterior
+              </button>
+              <button
+                type="button"
+                className="rounded-md border border-green-pale px-3 py-2 text-sm font-semibold text-green-dark disabled:opacity-40"
+                onClick={() => navigateToSequenceExam(currentExamSequenceIndex + 1)}
+                disabled={!hasNextExam}
+              >
+                Próximo exame
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {framesLoading && (
         <div className="mb-4 rounded-lg border border-green-pale bg-green-light/40 px-4 py-3 text-sm text-green-dark">
           A carregar imagens do ecocardiograma. Isto pode demorar alguns segundos.
@@ -228,6 +325,12 @@ export default function ManualAnnotation() {
         imageSettings={imageSettings}
         onImageSettingsChange={handleImageSettingsChange}
         defaultImageSettings={defaultImageSettings}
+        hasNextExam={hasNextExam}
+        onAdvanceToNextExam={
+          hasNextExam
+            ? () => navigateToSequenceExam(currentExamSequenceIndex + 1)
+            : undefined
+        }
         renderCanvas={(handleAnnotationChanged) => (
           <>
             <AnnotationTool

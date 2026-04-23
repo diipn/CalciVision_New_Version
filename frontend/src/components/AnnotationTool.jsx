@@ -311,9 +311,13 @@ const AnnotationTool = forwardRef(function AnnotationTool({ frames, currentFrame
                 const calciumResults = data.results?.binary_classification !== undefined ? data.results : null;
                 
                 // Converte a classificação numérica para booleana
-                calciumResults?.binary_classification && (
-                    calciumResults.binary_classification = Boolean(calciumResults?.binary_classification)
-                )
+                if (
+                    calciumResults &&
+                    calciumResults.binary_classification !== undefined &&
+                    calciumResults.binary_classification !== null
+                ) {
+                    calciumResults.binary_classification = Boolean(calciumResults.binary_classification)
+                }
                 
                 let valveBox = null
 
@@ -363,7 +367,12 @@ const AnnotationTool = forwardRef(function AnnotationTool({ frames, currentFrame
         setPredictedValveBoxes(updatedPreds)
         setCalcification(updatedCalcification)
         setPredictionHistory(updatedHistory)
-        setCalcificationStatus(updatedCalcification[currentFrame]?.binary_classification ? updatedCalcification[currentFrame].binary_classification : null)
+        const nextCalcification = updatedCalcification[currentFrame]?.binary_classification
+        setCalcificationStatus(
+            nextCalcification === undefined || nextCalcification === null
+                ? null
+                : Boolean(nextCalcification)
+        )
 
     }, [batchProgress])
 

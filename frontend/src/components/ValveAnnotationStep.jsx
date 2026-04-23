@@ -4,6 +4,8 @@ export default function ValveAnnotationStep({
   mode,
   isManualActive,
   isAiActive,
+  annotationReady,
+  annotatedFramesCount,
   onManualDefine,
   onClearManual,
   onDetectIA,
@@ -66,6 +68,20 @@ export default function ValveAnnotationStep({
             </>
           )}
         </div>
+      </div>
+
+      <div
+        className={`rounded-md border px-3 py-2 text-sm ${
+          annotationReady
+            ? "border-green-pale bg-green-50 text-green-900"
+            : "border-gray-200 bg-gray-50 text-gray-600"
+        }`}
+      >
+        {annotationReady
+          ? `${annotatedFramesCount} frame(s) com válvula delimitada neste exame.`
+          : mode === "manual"
+          ? "Ainda não existe uma delimitação. Desenhe a região da válvula para continuar."
+          : "Ainda não existe uma delimitação. Use a IA para propor a região da válvula."}
       </div>
     </div>
   );

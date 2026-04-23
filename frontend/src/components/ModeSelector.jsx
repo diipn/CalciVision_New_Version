@@ -2,14 +2,14 @@ import React from "react";
 
 const modeOptions = [
   {
-    value: "manual",
-    label: "Anotação Manual",
-    description: "Delimite a válvula manualmente.",
-  },
-  {
     value: "ia",
     label: "Anotação por IA",
     description: "A IA propõe a delimitação; pode ajustar se necessário.",
+  },
+  {
+    value: "manual",
+    label: "Anotação Manual",
+    description: "Delimite a válvula manualmente.",
   },
 ];
 

@@ -4,13 +4,12 @@ export default function ClinicalReportStep({
   notes,
   onGenerate,
   onNotesChange,
-  onSaveDraft,
   onExport,
   onSubmit,
   canGenerate,
   canSubmit,
-  notesDirty,
   reportReady,
+  submitLabel = "Submeter",
 }) {
   return (
     <div className="space-y-4">
@@ -22,6 +21,9 @@ export default function ClinicalReportStep({
         <p className="mt-2 text-xs text-gray-500">
           Campo para acrescentar notas que não estão no template (ex.: contexto, limitações da janela acústica).
         </p>
+        <p className="mt-1 text-xs text-green-dark">
+          As observações ficam associadas automaticamente a este exame.
+        </p>
         <textarea
           className="mt-3 min-h-[120px] w-full rounded-md border border-green-pale bg-white p-3 text-sm"
           value={notes}
@@ -31,7 +33,7 @@ export default function ClinicalReportStep({
       </div>
 
       <div className="rounded-lg border border-green-pale bg-white p-4 text-center">
-        <h3 className="text-base font-semibold text-green-dark">Gerar relatório</h3>
+        <h3 className="text-base font-semibold text-green-dark">Gerar relatório clínico</h3>
         <p className="mt-1 text-sm text-gray-600">
           Gere automaticamente o relatório clínico a partir da análise.
         </p>
@@ -45,22 +47,13 @@ export default function ClinicalReportStep({
         </button>
       </div>
 
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            className="rounded-md border border-green-pale px-4 py-2 text-sm font-semibold text-green-dark"
-            onClick={onSaveDraft}
-          >
-            Guardar rascunho
-          </button>
-          {notesDirty && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-xs font-semibold text-orange-800">
-              <span className="h-2 w-2 rounded-full bg-orange-400" aria-hidden="true" />
-              Alterações por guardar
-            </span>
-          )}
+      {!reportReady && (
+        <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+          Ainda não existe um relatório gerado para este exame.
         </div>
+      )}
+
+      <div className="space-y-3">
         <div className="space-y-3">
           <button
             type="button"
@@ -76,7 +69,7 @@ export default function ClinicalReportStep({
             onClick={onSubmit}
             disabled={!canSubmit}
           >
-            Submeter
+            {submitLabel}
           </button>
         </div>
       </div>

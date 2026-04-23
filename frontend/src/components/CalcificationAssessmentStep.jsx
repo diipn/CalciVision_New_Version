@@ -74,7 +74,13 @@ export default function CalcificationAssessmentStep({
         </div>
         {voSuggestion && (
           <div className="mt-2 text-sm text-gray-700">
-            <span className="font-semibold">Sugestão:</span> {voSuggestion}
+            <span className="font-semibold">Sugestão clínica inicial:</span> {voSuggestion}
+          </div>
+        )}
+
+        {voValue === null && !isVoOverrideActive && (
+          <div className="mt-3 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600">
+            Ainda não existe VO disponível. Quantifique automaticamente ou introduza um valor manual.
           </div>
         )}
 
@@ -122,6 +128,9 @@ export default function CalcificationAssessmentStep({
 
       <div className="rounded-lg border border-green-pale bg-white p-4">
         <h4 className="text-sm font-semibold text-gray-800">Classificação da calcificação</h4>
+        <p className="mt-1 text-xs text-gray-500">
+          Esta escolha define o resultado final associado ao exame.
+        </p>
         <div className="mt-3 grid grid-cols-2 gap-3">
           {[true, false].map((option) => (
             <button
@@ -139,6 +148,11 @@ export default function CalcificationAssessmentStep({
             </button>
           ))}
         </div>
+        {classificationChoice === null && (
+          <p className="mt-3 text-xs text-gray-500">
+            Selecione a classificação final para validar a avaliação clínica.
+          </p>
+        )}
       </div>
 
       {!isValidated ? (

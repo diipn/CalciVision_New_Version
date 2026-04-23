@@ -57,12 +57,14 @@ export default function AnalysisWizard({
   imageSettings,
   onImageSettingsChange,
   defaultImageSettings,
+  hasNextExam = false,
+  onAdvanceToNextExam,
 }) {
   const navigate = useNavigate();
   const { user } = useUser();
   const { setUnsavedChanges } = useUnsavedStore();
 
-  const [mode, setMode] = useState("manual");
+  const [mode, setMode] = useState("ia");
   const [currentStep, setCurrentStep] = useState(1);
   const [completedSteps, setCompletedSteps] = useState({});
   const [classificationChoice, setClassificationChoice] = useState(null);
@@ -77,7 +79,6 @@ export default function AnalysisWizard({
   const [aiActionActive, setAiActionActive] = useState(false);
   const [autoEnhanceEnabled, setAutoEnhanceEnabled] = useState(false);
   const [classificationTouched, setClassificationTouched] = useState(false);
-  const [notesDirty, setNotesDirty] = useState(false);
   const [toasts, setToasts] = useState([]);
   const [reportCreated, setReportCreated] = useState(false);
 
@@ -99,6 +100,7 @@ export default function AnalysisWizard({
       : null;
 
   const isAnnotationReady = rects.some((frameRects) => frameRects?.length > 0);
+  const annotatedFramesCount = rects.filter((frameRects) => frameRects?.length > 0).length;
   const canSubmit = completedSteps[1] && completedSteps[2] && isValidated;
 
   const addToast = (message, type = "info") => {
@@ -115,6 +117,34 @@ export default function AnalysisWizard({
       console.log(`[AnalysisWizard] ${label}`, data);
     }
   };
+
+  useEffect(() => {
+    setMode("ia");
+    setCurrentStep(1);
+    setCompletedSteps({});
+    setClassificationChoice(null);
+    setIsValidated(false);
+    setReportText("");
+    setClinicalNotes("");
+    setVoOverrideEnabled(false);
+    setVoOverrideValue(null);
+    setVoManualUiEnabled(false);
+    setAnnotationStatusMessage("");
+    setManualActionActive(false);
+    setAiActionActive(false);
+    setAutoEnhanceEnabled(false);
+    setClassificationTouched(false);
+    setToasts([]);
+    setReportCreated(false);
+
+    annotationRevision.current = 0;
+    confirmedAnnotationRevision.current = 0;
+    assessmentRevision.current = 0;
+    confirmedAssessmentRevision.current = 0;
+    settingsLoaded.current = false;
+    isHydrating.current = true;
+    progressHydrated.current = false;
+  }, [echoId]);
 
   useEffect(() => {
     const hydrateSettings = async () => {
@@ -324,7 +354,6 @@ export default function AnalysisWizard({
   const handleNotesChange = async (value) => {
     setClinicalNotes(value);
     setUnsavedChanges(true);
-    setNotesDirty(true);
     await updateExamSettings(echoId, { clinicalNotes: value });
   };
 
@@ -437,7 +466,7 @@ export default function AnalysisWizard({
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
-  const handleUpdateEcho = async (completed) => {
+  const handleUpdateEcho = async () => {
     try {
       if (!patient) return;
       const results = buildFrameResults();
@@ -451,11 +480,11 @@ export default function AnalysisWizard({
         voOverrideValue,
       });
 
-      await createReportIfNeeded(completed);
+      await createReportIfNeeded(true);
 
       const payload = {
         results,
-        completed,
+        completed: true,
       };
       const echoName = exam?.description?.trim();
       if (echoName) {
@@ -469,9 +498,10 @@ export default function AnalysisWizard({
       await api.post(endpoint, payload);
 
       setUnsavedChanges(false);
-      setNotesDirty(false);
-      addToast(completed ? "Resultados submetidos com sucesso." : "Rascunho guardado.", "success");
-      if (completed) {
+      addToast("Resultados submetidos com sucesso.", "success");
+      if (hasNextExam && onAdvanceToNextExam) {
+        onAdvanceToNextExam();
+      } else {
         navigate(`/patients?patient=${patient.id}`);
       }
     } catch (error) {
@@ -495,6 +525,7 @@ export default function AnalysisWizard({
   };
 
   const stepTitle = steps.find((step) => step.id === currentStep)?.title;
+  const stepObjective = steps.find((step) => step.id === currentStep)?.objective;
   const modeLabel = mode === "manual" ? "Manual" : "IA";
 
   return (
@@ -503,14 +534,19 @@ export default function AnalysisWizard({
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">
-              Anotação da Válvula Aórtica — {modeLabel}
+              Análise da Válvula Aórtica
             </h1>
             <p className="text-sm text-gray-600">
-              Siga os passos para concluir a análise e gerar o relatório.
+              {stepObjective}
             </p>
           </div>
-          <div className="rounded-full bg-green-50 px-4 py-1 text-sm font-semibold text-green-dark">
-            Passo {currentStep} de {steps.length} — {stepTitle}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-green-pale bg-white px-3 py-1 text-sm font-semibold text-green-dark">
+              Modo {modeLabel}
+            </span>
+            <div className="rounded-full bg-green-50 px-4 py-1 text-sm font-semibold text-green-dark">
+              Passo {currentStep} de {steps.length} — {stepTitle}
+            </div>
           </div>
         </div>
       </header>
@@ -560,6 +596,8 @@ export default function AnalysisWizard({
                 mode={mode}
                 isManualActive={manualActionActive}
                 isAiActive={aiActionActive}
+                annotationReady={isAnnotationReady}
+                annotatedFramesCount={annotatedFramesCount}
                 onManualDefine={() => {
                   annotationToolRef.current?.iniciarAnotacaoManual();
                   setManualActionActive(true);
@@ -624,11 +662,17 @@ export default function AnalysisWizard({
               />
               <button
                 type="button"
-                className="w-full rounded-md bg-green-dark px-4 py-2 text-sm font-semibold text-white"
+                className="w-full rounded-md bg-green-dark px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
                 onClick={handleConfirmAnnotation}
+                disabled={!isAnnotationReady}
               >
                 Confirmar anotação
               </button>
+              {!isAnnotationReady && (
+                <p className="text-xs text-gray-500">
+                  Confirme a anotação depois de existir pelo menos uma ROI da válvula.
+                </p>
+              )}
             </div>
           )}
 
@@ -676,13 +720,12 @@ export default function AnalysisWizard({
               notes={clinicalNotes}
               onGenerate={handleGenerateReport}
               onNotesChange={handleNotesChange}
-              onSaveDraft={() => handleUpdateEcho(false)}
               onExport={handleExportPdf}
-              onSubmit={() => handleUpdateEcho(true)}
+              onSubmit={handleUpdateEcho}
               canGenerate={isValidated}
               canSubmit={canSubmit}
-              notesDirty={notesDirty}
               reportReady={Boolean(reportText)}
+              submitLabel={hasNextExam ? "Submeter e seguir" : "Submeter"}
             />
           )}
         </aside>

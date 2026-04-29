@@ -154,3 +154,17 @@ input[type="checkbox"]:disabled {
 .patient-row-menu {
   interpolate-size: allow-keywords;
 }
+
+@media print {
+  .report-section {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .report-section-heading,
+  .report-section-heading h3,
+  .report-section-heading p {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+}

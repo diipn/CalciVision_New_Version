@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api, { deletePatient } from '../api';
+import { deleteEchocardiogram, deletePatient } from '../api';
 import AlertDialogMenu from './AlertDialogMenu';
 import { formatExamDate, formatVo, getRiskBadge } from '../utils/examComparison';
 
@@ -150,8 +150,8 @@ function EchocardiogramsTable({ patient, reloadTable }) {
   const reportsByExam = useMemo(() => {
     const map = {};
     patient.reports?.forEach((report) => {
-      if (!map[report.examId]) {
-        map[report.examId] = report;
+      if (report.echocardiogram && !map[report.echocardiogram]) {
+        map[report.echocardiogram] = report;
       }
     });
     return map;
@@ -187,10 +187,20 @@ function EchocardiogramsTable({ patient, reloadTable }) {
 
   const handleDeleteEchocardiogram = async (echo) => {
     try {
-      await api.delete(`/api/patient/${patient.id}/echocardiogram/${echo.id}/delete/`);
+      await deleteEchocardiogram(patient.id, echo.id);
+      localStorage.removeItem(`exam-settings-${echo.id}`);
+      localStorage.removeItem(`exam-progress-${echo.id}`);
+      localStorage.removeItem(`clinical-report-draft-${patient.id}-${echo.id}`);
+      setSelectedExams((prev) => prev.filter((examId) => examId !== echo.id));
+      setSelectionError('');
       reloadTable();
     } catch (error) {
       console.error('Erro ao eliminar ecocardiograma', error);
+      alert(
+        error?.response?.data?.error ||
+          error?.response?.data?.message ||
+          'Não foi possível eliminar o ecocardiograma.'
+      );
     }
   };
 
@@ -245,11 +255,11 @@ function EchocardiogramsTable({ patient, reloadTable }) {
           </tr>
         </thead>
         <tbody>
-          {patient.echocardiograms?.map((echo, index) => {
+          {patient.echocardiograms?.map((echo) => {
             const risk = getRiskBadge(echo.vo);
             const report = reportsByExam[echo.id];
             return (
-              <tr key={index}>
+              <tr key={echo.id}>
                 <td className="px-4 py-1">
                   <input
                     type="checkbox"
@@ -272,12 +282,16 @@ function EchocardiogramsTable({ patient, reloadTable }) {
                 </td>
                 <td className="px-4 py-1">
                   {report ? (
-                    <button
-                      className='text-green-dark underline'
-                      onClick={() => window.open(report.report_url)}
-                    >
-                      {report.pdf_name || 'Ver relatório'}
-                    </button>
+                    report.echocardiogram ? (
+                      <button
+                        className='text-green-dark underline'
+                        onClick={() => navigate(`/patients/${patient.id}/reports/${report.echocardiogram}`)}
+                      >
+                        Abrir relatório
+                      </button>
+                    ) : (
+                      <span>Relatório disponível</span>
+                    )
                   ) : (
                     <span>—</span>
                   )}

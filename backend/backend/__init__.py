@@ -1,5 +1,9 @@
-# This will make sure the app is always imported when
-# Django starts so that shared_task will use this app.
-from .celery import app as celery_app
+try:
+    # Import Celery when available so shared_task uses the configured app.
+    from .celery import app as celery_app
+except ModuleNotFoundError as exc:
+    if exc.name != "celery":
+        raise
+    celery_app = None
 
 __all__ = ('celery_app',)

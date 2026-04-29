@@ -1,12 +1,10 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import api, { createReport, getEchoResults, getExamSettings, updateExamSettings } from "../api";
+import api, { getClinicalReport, getExamSettings, updateExamSettings, upsertClinicalReport } from "../api";
 import { useUser } from "../contexts/UserContext";
 import AlertDialog from "./AlertDialogMenu";
 import { useUnsavedStore } from "../store/useUnsavedStore";
 import { Switch, Tooltip } from "radix-ui";
-import ReportPDF from "./ReportPDF";
-import { pdf } from "@react-pdf/renderer";
 
 const VO_THRESHOLD = 0.66;
 
@@ -18,6 +16,7 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
   const [classificationConfirmed, setClassificationConfirmed] = useState(false);
   const [isValidated, setIsValidated] = useState(false);
   const [reportText, setReportText] = useState("");
+  const [reportDraft, setReportDraft] = useState(null);
   const form = useRef(null);
   const { user } = useUser();
   const navigate = useNavigate();
@@ -35,7 +34,7 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
 
   useEffect(() => {
     const hydrateSettings = async () => {
-      if (!echoId) return;
+      if (!echoId || !patient?.id) return;
       const settings = await getExamSettings(echoId);
       if (settings) {
         setClassificationChoice(
@@ -47,9 +46,13 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
         setIsValidated(Boolean(settings.validated));
         setReportText(settings.reportText || "");
       }
+      const report = await getClinicalReport(patient.id, echoId);
+      if (report) {
+        setReportDraft(report);
+      }
     };
     hydrateSettings();
-  }, [echoId]);
+  }, [echoId, patient?.id]);
 
   useEffect(() => {
     const rectList = rects[currentFrame];
@@ -94,62 +97,66 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
     }
   }, [rects[currentFrame], currentFrame]);
 
+  const buildFrameResults = () =>
+    frames.map((frame, frameIndex) => {
+      const frameRects = Array.isArray(rects?.[frameIndex]) ? rects[frameIndex] : [];
+      const cleanedRects = frameRects
+        .map((rect, rectIndex) => ({
+          id: String(rect?.id ?? `${frame.id}-${rectIndex}`),
+          x: Number(rect?.x),
+          y: Number(rect?.y),
+          width: Number(rect?.width),
+          height: Number(rect?.height),
+          is_annotation_generated: Boolean(rect?.is_annotation_generated),
+        }))
+        .filter(
+          (rect) =>
+            Number.isFinite(rect.x) &&
+            Number.isFinite(rect.y) &&
+            Number.isFinite(rect.width) &&
+            Number.isFinite(rect.height)
+        );
+
+      const frameCalc = calcification?.[frameIndex];
+      const calcValue = frameCalc?.binary_classification;
+      const isCalcified =
+        calcValue === null || calcValue === undefined
+          ? typeof calcificationStatus === "boolean"
+            ? calcificationStatus
+            : null
+          : Boolean(calcValue);
+      const generatedCalcium =
+        typeof frameCalc?.is_calcification_generated === "boolean"
+          ? frameCalc.is_calcification_generated
+          : null;
+
+      return {
+        frame_id: frame.id,
+        rects: cleanedRects,
+        is_calcified: isCalcified,
+        generated_calcium: generatedCalcium,
+      };
+    });
+
   /* Quando o médico submete, os dados do ecocardiograma e frames devem ser atualizados */
   const handleUpdateEcho = async (completed) => {
     try {
-      const results = frames.map((frame, frameIndex) => {
-        const frameRects = Array.isArray(rects?.[frameIndex]) ? rects[frameIndex] : [];
-        const cleanedRects = frameRects
-          .map((rect, rectIndex) => ({
-            id: String(rect?.id ?? `${frame.id}-${rectIndex}`),
-            x: Number(rect?.x),
-            y: Number(rect?.y),
-            width: Number(rect?.width),
-            height: Number(rect?.height),
-            is_annotation_generated: Boolean(rect?.is_annotation_generated),
-          }))
-          .filter(
-            (rect) =>
-              Number.isFinite(rect.x) &&
-              Number.isFinite(rect.y) &&
-              Number.isFinite(rect.width) &&
-              Number.isFinite(rect.height)
-          );
-
-        const frameCalc = calcification?.[frameIndex];
-        const calcValue = frameCalc?.binary_classification;
-        const isCalcified =
-          calcValue === null || calcValue === undefined
-            ? typeof calcificationStatus === "boolean"
-              ? calcificationStatus
-              : null
-            : Boolean(calcValue);
-        const generatedCalcium =
-          typeof frameCalc?.is_calcification_generated === "boolean"
-            ? frameCalc.is_calcification_generated
-            : null;
-
-        return {
-          frame_id: frame.id,
-          rects: cleanedRects,
-          is_calcified: isCalcified,
-          generated_calcium: generatedCalcium,
-        };
-      });
+      const results = buildFrameResults();
 
       await api.post(
         `/api/patient/${patient.id}/echocardiogram/${echoId}/submit/`,
         { results, completed, echoName }
       );
       // Gera o relatório automaticamente
-      if (autoReport && completed) {
+      if (autoReport && completed && reportText) {
         try {
-          const echoData = await getEchoResults(patient.id);
-
-          const pdfBlob = await generatePdfBlob(echoData, patient, user, reportText);
-          const formData = new FormData();
-          formData.append("pdf_file", pdfBlob, `report_${patient.id}.pdf`);
-          await createReport(formData, patient.id);
+          const report = await upsertClinicalReport(patient.id, echoId, {
+            classification_choice: activeClassification,
+            validated_summary: reportText,
+            clinical_conclusion: reportText,
+            mark_ready: true,
+          });
+          setReportDraft(report);
         } catch (err) {
           console.error("Erro ao gerar o relatório:", err);
         }
@@ -160,21 +167,6 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
     } catch (error) {
       console.error("Erro na submissão dos resultados", error);
     }
-  };
-
-  const generatePdfBlob = async (echoData, selectedPatient, user, reportText) => {
-    const doc = (
-      <ReportPDF
-        data={echoData}
-        patient={selectedPatient}
-        medico={user}
-        reportText={reportText}
-      />
-    );
-    const asPdf = pdf([]);
-    asPdf.updateContainer(doc);
-    const blob = await asPdf.toBlob();
-    return blob;
   };
 
   const updateCalcification = (binary_classification) => {
@@ -233,9 +225,21 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
     if (!patient || !exam) return;
     const template = `RELATÓRIO AUTOMÁTICO - CALCIVISION\n\nPaciente: ${patient.name}\nData do exame: ${new Date(exam.date).toLocaleDateString('pt-PT')}\nVariável Objetiva (VO): ${
       voValue !== null ? (voValue * 100).toFixed(0) : 'N/A'
-    }%\nClassificação: ${activeClassification ? 'Calcificada' : 'Não calcificada'}\n\nObservações automáticas:\n- Comparação longitudinal recomendada para acompanhar a progressão.\n- Este resultado é uma simulação e não substitui a decisão clínica.\n\nAssinatura: ${user?.first_name || 'Médico'} ${user?.last_name || ''}`;
+    }%\nClassificação: ${activeClassification ? 'Calcificada' : 'Não calcificada'}\n\nObservações automáticas:\n- Comparação longitudinal recomendada para acompanhar a progressão.\n- Este resultado é uma simulação e não substitui a decisão clínica.`;
     setReportText(template);
     await updateExamSettings(echoId, { reportText: template });
+    try {
+      const report = await upsertClinicalReport(patient.id, echoId, {
+        results: buildFrameResults(),
+        classification_choice: activeClassification,
+        validated_summary: template,
+        clinical_conclusion: template,
+        mark_ready: false,
+      });
+      setReportDraft(report);
+    } catch (error) {
+      console.error("Erro ao persistir o relatório clínico:", error);
+    }
   };
 
   const handleReportChange = async (value) => {
@@ -538,7 +542,7 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
         </div>
         <p className="text-sm text-gray-600">
           {isValidated
-            ? 'Gerar automaticamente e ajustar observações antes de exportar.'
+            ? 'Gerar automaticamente e ajustar observações antes de abrir a página dedicada do relatório.'
             : 'Valide a deteção para desbloquear o relatório.'}
         </p>
         <textarea
@@ -548,19 +552,6 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
           placeholder="Clique em 'Gerar relatório' para preencher o template."
           disabled={!isValidated}
         />
-        <button
-          type="button"
-          className="bg-green-dark text-white px-4 py-2 rounded"
-          onClick={async () => {
-            const echoData = await getEchoResults(patient.id);
-            const pdfBlob = await generatePdfBlob(echoData, patient, user, reportText);
-            const url = URL.createObjectURL(pdfBlob);
-            window.open(url, '_blank');
-          }}
-          disabled={!reportText}
-        >
-          Exportar PDF
-        </button>
       </div>
 
       <div className="w-full flex gap-2 mt-8">

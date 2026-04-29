@@ -29,7 +29,8 @@ export const getPatients = async (params) => {
 
 export const getReports = async (patientId) => {
   try {
-    const response = await api.get(`/api/reports/${patientId}/`);
+    const endpoint = patientId ? `/api/reports/${patientId}/` : "/api/reports/";
+    const response = await api.get(endpoint);
     return response.data;
   } catch (error) {
     console.error("Error fetching reports:", error);
@@ -53,6 +54,16 @@ export const deleteReport = async (reportId) => {
     return response.data;
   } catch (error) {
     console.error("Error deleteing report:", error);
+    throw error;
+  }
+};
+
+export const deleteEchocardiogram = async (patientId, echoId) => {
+  try {
+    const response = await api.delete(`/api/patient/${patientId}/echocardiogram/${echoId}/delete/`);
+    return response.data;
+  } catch (error) {
+    console.error("Error deleting echocardiogram:", error);
     throw error;
   }
 };
@@ -81,9 +92,42 @@ export const createPatient = async (patientData) => {
   }
 };
 
-export const createReport = async (formData, patientId) => {
+export const getClinicalReport = async (patientId, echoId) => {
   try {
-    const response = await api.post(`/api/reports/${patientId}/create/`, formData);
+    const response = await api.get(`/api/patient/${patientId}/echocardiogram/${echoId}/report/`);
+    return response.data;
+  } catch (error) {
+    if (error.response?.status === 404) {
+      return null;
+    }
+    console.error("Error fetching clinical report:", error);
+    throw error;
+  }
+};
+
+export const getEchocardiogramFrames = async (patientId, echoId) => {
+  try {
+    const response = await api.get(`/api/patient/${patientId}/echocardiogram/${echoId}/frames/`);
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching echocardiogram frames:", error);
+    throw error;
+  }
+};
+
+export const upsertClinicalReport = async (patientId, echoId, payload) => {
+  try {
+    const response = await api.post(`/api/patient/${patientId}/echocardiogram/${echoId}/report/`, payload);
+    return response.data;
+  } catch (error) {
+    console.error("Error upserting clinical report:", error);
+    throw error;
+  }
+};
+
+export const createReport = async (reportData, patientId) => {
+  try {
+    const response = await api.post(`/api/reports/${patientId}/create/`, reportData);
     return response.data;
   } catch (error) {
     console.error("Error creating report:", error);
@@ -143,6 +187,77 @@ export const quantifyObjectiveVariable = async (patientId, echoId, results) => {
     { results }
   );
   return response.data;
+};
+
+export const submitExamAnalysis = async (patientId, echoId, payload) => {
+  const response = await api.post(
+    `/api/patient/${patientId}/echocardiogram/${echoId}/submit/`,
+    payload
+  );
+  return response.data;
+};
+
+const extractFilenameFromDisposition = (contentDisposition) => {
+  if (!contentDisposition) return null;
+  const utfMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utfMatch?.[1]) {
+    return decodeURIComponent(utfMatch[1]);
+  }
+  const asciiMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
+  return asciiMatch?.[1] || null;
+};
+
+const parseBlobError = async (error) => {
+  const blob = error?.response?.data;
+  if (!(blob instanceof Blob)) {
+    return error?.response?.data?.error || error.message;
+  }
+
+  try {
+    const text = await blob.text();
+    const parsed = JSON.parse(text);
+    return parsed?.error || parsed?.detail || text;
+  } catch {
+    return "O backend devolveu um erro ao exportar o PDF.";
+  }
+};
+
+export const downloadClinicalReport = async (reportId, fallbackFilename) => {
+  try {
+    const response = await api.get(`/api/report/${reportId}/export/`, {
+      responseType: "blob",
+    });
+
+    const contentType = response.headers["content-type"] || "";
+    if (!contentType.includes("application/pdf")) {
+      throw new Error("O conteúdo devolvido não é um PDF válido.");
+    }
+
+    const blob = response.data;
+    if (!(blob instanceof Blob) || blob.size === 0) {
+      throw new Error("O ficheiro PDF devolvido está vazio.");
+    }
+
+    const filename =
+      extractFilenameFromDisposition(response.headers["content-disposition"]) ||
+      fallbackFilename ||
+      `relatorio_${reportId}.pdf`;
+    const normalizedFilename = filename.toLowerCase().endsWith(".pdf") ? filename : `${filename}.pdf`;
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = normalizedFilename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+    return normalizedFilename;
+  } catch (error) {
+    const message = await parseBlobError(error);
+    throw new Error(message);
+  }
 };
 
 export default api;

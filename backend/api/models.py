@@ -78,13 +78,39 @@ class EchoFrameData(models.Model):
     def __str__(self):
         return f"Data for frame {self.frame.frame_index} of {self.frame.echocardiogram.patient.name}"
 
-class ReportPdf(models.Model):
+class ClinicalReport(models.Model):
+
+    class Status(models.TextChoices):
+        DRAFT = 'DRAFT', 'Draft'
+        READY = 'READY', 'Ready'
+        FAILED = 'FAILED', 'Failed'
+
     patient = models.ForeignKey(to=Patient, on_delete=models.CASCADE, related_name='reports')
+    echocardiogram = models.OneToOneField(
+        to=Echocardiogram,
+        on_delete=models.CASCADE,
+        related_name='clinical_report',
+        blank=True,
+        null=True,
+    )
     doctor = models.ForeignKey(to=CustomUser, on_delete=models.CASCADE, related_name='reports')
-    pdf_file = models.FileField(upload_to='reports/')
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
+    content = models.JSONField(default=dict, blank=True)
+    source_snapshot = models.JSONField(default=dict, blank=True)
+    validated_summary = models.TextField(blank=True)
+    clinical_notes = models.TextField(blank=True)
+    clinical_conclusion = models.TextField(blank=True)
+    generation_error = models.TextField(blank=True)
+    pdf_file = models.FileField(upload_to='reports/', blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    validated_at = models.DateTimeField(blank=True, null=True)
+    pdf_generated_at = models.DateTimeField(blank=True, null=True)
     
     @property
     def pdf_name(self):
+        if not self.pdf_file:
+            return ''
         return self.pdf_file.name.split('/')[-1]
     
     @property
@@ -94,5 +120,6 @@ class ReportPdf(models.Model):
         return 0
 
     def __str__(self):
-        return f"Report for {self.patient.name} by {self.doctor.username}"
+        exam_id = self.echocardiogram_id or 'legacy'
+        return f"Clinical report {self.id} for {self.patient.name} / exam {exam_id}"
     

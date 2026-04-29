@@ -1,23 +1,26 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import api, {
-  createReport,
-  getEchoResults,
+import {
+  getClinicalReport,
   getExamSettings,
   quantifyObjectiveVariable,
+  submitExamAnalysis,
+  upsertClinicalReport,
   updateExamSettings,
 } from "../api";
-import { useUser } from "../contexts/UserContext";
 import { useUnsavedStore } from "../store/useUnsavedStore";
-import ReportPDF from "./ReportPDF";
-import { pdf } from "@react-pdf/renderer";
 import ModeSelector from "./ModeSelector";
 import ImageToolsPanel from "./ImageToolsPanel";
 import ValveAnnotationStep from "./ValveAnnotationStep";
 import CalcificationAssessmentStep from "./CalcificationAssessmentStep";
-import ClinicalReportStep from "./ClinicalReportStep";
+import ReportPreparationStep from "./ReportPreparationStep";
 import ToastStack from "./ToastStack";
 import { computeAutoImageSettings } from "../utils/autoImageEnhance";
+import {
+  readStoredClinicalReportDraft,
+  clearStoredClinicalReportDraft,
+  writeStoredClinicalReportDraft,
+} from "../utils/clinicalReportDraft";
 
 const VO_THRESHOLD = 30;
 
@@ -35,7 +38,7 @@ const steps = [
   {
     id: 3,
     title: "Relatório clínico",
-    objective: "Gere o relatório e finalize o processo.",
+    objective: "Adiciona observações clínicas e gera o relatório.",
   },
 ];
 
@@ -43,6 +46,21 @@ const normalizeVo = (value) => {
   if (value === null || value === undefined) return null;
   return value > 1 ? value : value * 100;
 };
+
+const buildReportErrorMessage = (error, fallbackMessage) => {
+  const backendError = error?.response?.data?.error;
+  const backendIssues = error?.response?.data?.issues;
+
+  return [
+    backendError || fallbackMessage,
+    Array.isArray(backendIssues) && backendIssues.length > 0 ? backendIssues.join(" ") : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+};
+
+const hasAnnotatedFrameResults = (results = []) =>
+  results.some((frame) => Array.isArray(frame?.rects) && frame.rects.length > 0);
 
 export default function AnalysisWizard({
   renderCanvas,
@@ -68,7 +86,6 @@ export default function AnalysisWizard({
   onSelectCurrentExam,
 }) {
   const navigate = useNavigate();
-  const { user } = useUser();
   const { setUnsavedChanges } = useUnsavedStore();
 
   const [mode, setMode] = useState("ia");
@@ -76,8 +93,12 @@ export default function AnalysisWizard({
   const [completedSteps, setCompletedSteps] = useState({});
   const [classificationChoice, setClassificationChoice] = useState(null);
   const [isValidated, setIsValidated] = useState(false);
-  const [reportText, setReportText] = useState("");
+  const [reportDraft, setReportDraft] = useState(null);
+  const [reportError, setReportError] = useState("");
+  const [reportLoading, setReportLoading] = useState(false);
   const [clinicalNotes, setClinicalNotes] = useState("");
+  const [validatedSummary, setValidatedSummary] = useState("");
+  const [clinicalConclusion, setClinicalConclusion] = useState("");
   const [voOverrideEnabled, setVoOverrideEnabled] = useState(false);
   const [voOverrideValue, setVoOverrideValue] = useState(null);
   const [voManualUiEnabled, setVoManualUiEnabled] = useState(false);
@@ -88,7 +109,6 @@ export default function AnalysisWizard({
   const [autoEnhanceLoading, setAutoEnhanceLoading] = useState(false);
   const [classificationTouched, setClassificationTouched] = useState(false);
   const [toasts, setToasts] = useState([]);
-  const [reportCreated, setReportCreated] = useState(false);
 
   const annotationRevision = useRef(0);
   const confirmedAnnotationRevision = useRef(0);
@@ -109,7 +129,6 @@ export default function AnalysisWizard({
 
   const isAnnotationReady = rects.some((frameRects) => frameRects?.length > 0);
   const annotatedFramesCount = rects.filter((frameRects) => frameRects?.length > 0).length;
-  const canSubmit = completedSteps[1] && completedSteps[2] && isValidated;
   const isComparisonMode = comparisonCandidates.length > 1;
   const activeCandidate = comparisonCandidates.find((candidate) => candidate.id === activeExamId);
   const selectedCandidate = comparisonCandidates.find((candidate) => candidate.id === selectedExamId);
@@ -135,8 +154,12 @@ export default function AnalysisWizard({
     setCompletedSteps({});
     setClassificationChoice(null);
     setIsValidated(false);
-    setReportText("");
+    setReportDraft(null);
+    setReportError("");
+    setReportLoading(false);
     setClinicalNotes("");
+    setValidatedSummary("");
+    setClinicalConclusion("");
     setVoOverrideEnabled(false);
     setVoOverrideValue(null);
     setVoManualUiEnabled(false);
@@ -147,7 +170,6 @@ export default function AnalysisWizard({
     setAutoEnhanceLoading(false);
     setClassificationTouched(false);
     setToasts([]);
-    setReportCreated(false);
 
     annotationRevision.current = 0;
     confirmedAnnotationRevision.current = 0;
@@ -172,8 +194,9 @@ export default function AnalysisWizard({
           setClassificationTouched(true);
         }
         setIsValidated(Boolean(settings.validated));
-        setReportText(settings.reportText || "");
         setClinicalNotes(settings.clinicalNotes || "");
+        setValidatedSummary(settings.validatedSummary || "");
+        setClinicalConclusion(settings.clinicalConclusion || "");
         setVoOverrideEnabled(Boolean(settings.voOverrideEnabled));
         if (settings.voOverrideValue !== undefined && settings.voOverrideValue !== null) {
           setVoOverrideValue(Number(settings.voOverrideValue));
@@ -185,28 +208,70 @@ export default function AnalysisWizard({
   }, [echoId]);
 
   useEffect(() => {
-    setReportCreated(false);
-  }, [echoId]);
+    const hydrateReport = async () => {
+      if (!patient?.id || !echoId) return;
+      try {
+        setReportLoading(true);
+        const report = await getClinicalReport(patient.id, echoId);
+        if (!report) {
+          const storedDraft = readStoredClinicalReportDraft(patient.id, echoId);
+          setReportDraft(storedDraft);
+          if (storedDraft) {
+            setValidatedSummary(storedDraft.validated_summary || "");
+            setClinicalNotes(storedDraft.clinical_notes || "");
+            setClinicalConclusion(storedDraft.clinical_conclusion || "");
+          }
+          return;
+        }
+
+        setReportDraft(report);
+        setReportError("");
+        setValidatedSummary(report.validated_summary || "");
+        setClinicalNotes(report.clinical_notes || "");
+        setClinicalConclusion(report.clinical_conclusion || "");
+        writeStoredClinicalReportDraft(patient.id, echoId, report);
+        setCompletedSteps((prev) => ({
+          ...prev,
+          3: true,
+        }));
+      } catch (error) {
+        console.error("Erro ao carregar o relatório clínico:", error);
+        setReportError(
+          buildReportErrorMessage(
+            error,
+            "Não foi possível carregar o relatório persistido deste exame."
+          )
+        );
+      } finally {
+        setReportLoading(false);
+      }
+    };
+
+    hydrateReport();
+  }, [patient?.id, echoId]);
 
   useEffect(() => {
     if (!echoId) return;
+    progressHydrated.current = true;
     const saved = localStorage.getItem(`exam-progress-${echoId}`);
     if (!saved) return;
     try {
       const parsed = JSON.parse(saved);
       if (parsed?.step) {
         setCurrentStep(parsed.step);
-      }
-      if (parsed?.reportText) {
-        setReportText(parsed.reportText);
-      }
-      if (parsed?.step || parsed?.reportText) {
-        setCompletedSteps({
-          1: parsed?.step >= 2,
-          2: parsed?.step >= 3,
-          3: Boolean(parsed?.reportText),
+        setCompletedSteps((prev) => {
+          const next = {
+            ...prev,
+            1: parsed.step >= 2,
+            2: parsed.step >= 3,
+          };
+
+          if (prev[1] === next[1] && prev[2] === next[2]) {
+            return prev;
+          }
+
+          return next;
         });
-        progressHydrated.current = true;
       }
     } catch (error) {
       console.warn("Não foi possível carregar o progresso guardado.", error);
@@ -215,12 +280,21 @@ export default function AnalysisWizard({
 
   useEffect(() => {
     if (!progressHydrated.current) return;
-    setCompletedSteps((prev) => ({
-      ...prev,
-      2: isValidated || prev[2],
-      3: reportText ? true : prev[3],
-    }));
-  }, [isValidated, reportText]);
+    setCompletedSteps((prev) => {
+      const nextStep2 = isValidated || prev[2];
+      const nextStep3 = Boolean(reportDraft);
+
+      if (prev[2] === nextStep2 && prev[3] === nextStep3) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        2: nextStep2,
+        3: nextStep3,
+      };
+    });
+  }, [isValidated, reportDraft]);
 
   useEffect(() => {
     if (!echoId) return;
@@ -228,11 +302,11 @@ export default function AnalysisWizard({
       step: currentStep,
       rects,
       calcification,
-      reportText,
+      hasReportDraft: Boolean(reportDraft),
       updatedAt: new Date().toISOString(),
     };
     localStorage.setItem(`exam-progress-${echoId}`, JSON.stringify(payload));
-  }, [echoId, currentStep, rects, calcification, reportText]);
+  }, [echoId, currentStep, rects, calcification, reportDraft]);
 
   useEffect(() => {
     if (voBase !== null && !voOverrideEnabled && voOverrideValue === null) {
@@ -242,10 +316,10 @@ export default function AnalysisWizard({
 
 
   useEffect(() => {
-    if (classificationChoice !== null) {
+    if (classificationChoice !== null && classificationChoice !== calcificationStatus) {
       setCalcificationStatus(classificationChoice);
     }
-  }, [classificationChoice, setCalcificationStatus]);
+  }, [classificationChoice, calcificationStatus, setCalcificationStatus]);
 
   const handleAnnotationChanged = () => {
     annotationRevision.current += 1;
@@ -260,6 +334,9 @@ export default function AnalysisWizard({
       if (currentStep > 2) setCurrentStep(2);
       setClassificationChoice(null);
       setClassificationTouched(false);
+      setReportDraft(null);
+      clearStoredClinicalReportDraft(patient?.id, echoId);
+      setReportError("A análise foi alterada. Gere novamente o relatório antes de o validar ou exportar.");
       addToast("Alteração detetada. É necessário rever a avaliação clínica.", "warning");
     }
   };
@@ -275,6 +352,9 @@ export default function AnalysisWizard({
     if (assessmentRevision.current > confirmedAssessmentRevision.current) {
       setIsValidated(false);
       setCompletedSteps((prev) => ({ ...prev, 2: false, 3: false }));
+      setReportDraft(null);
+      clearStoredClinicalReportDraft(patient?.id, echoId);
+      setReportError("A avaliação clínica mudou. Gere novamente o relatório para refletir a decisão final.");
       updateExamSettings(echoId, { validated: false });
       addToast("Alteração detetada. Revalide a avaliação clínica.", "warning");
     }
@@ -293,6 +373,9 @@ export default function AnalysisWizard({
     setCurrentStep(1);
     setCompletedSteps({});
     setIsValidated(false);
+    setReportDraft(null);
+    clearStoredClinicalReportDraft(patient?.id, echoId);
+    setReportError("");
   }, [isComparisonMode, selectedExamId, activeExamId]);
 
   const handleModeChange = (nextMode) => {
@@ -303,6 +386,9 @@ export default function AnalysisWizard({
     setManualActionActive(false);
     setAiActionActive(false);
     setCompletedSteps((prev) => ({ ...prev, 2: false, 3: false }));
+    setReportDraft(null);
+    clearStoredClinicalReportDraft(patient?.id, echoId);
+    setReportError("O modo de anotação foi alterado. Gere um novo relatório após rever a análise.");
     setCurrentStep(1);
     addToast("Modo alterado. Reveja a anotação da válvula.", "info");
   };
@@ -370,33 +456,77 @@ export default function AnalysisWizard({
     addToast("Avaliação desbloqueada para edição.", "info");
   };
 
-  const handleGenerateReport = async () => {
-    if (!patient || !exam) return;
-    const classificationLabel =
-      classificationChoice === null
-        ? "Não definida"
-        : classificationChoice
-        ? "Calcificada"
-        : "Não calcificada";
-    const examDate = exam.date || exam.uploaded_at;
-    const template = `RELATÓRIO CLÍNICO - CALCIVISION\n\nPaciente: ${patient.name}\nData do exame: ${
-      examDate ? new Date(examDate).toLocaleDateString("pt-PT") : "N/A"
-    }\nVariável Objectiva (VO): ${
-      voEffective !== null ? `${voEffective.toFixed(0)}%` : "N/A"
-    }\nClassificação: ${classificationLabel}\n\nObservações automáticas:\n- Comparação longitudinal recomendada para acompanhar a progressão.\n- Este resultado é uma simulação e não substitui a decisão clínica.\n\nObservações clínicas:\n${clinicalNotes || "—"}\n\nAssinatura: ${user?.first_name || "Médico"} ${user?.last_name || ""}`;
-    setReportText(template);
-    setUnsavedChanges(true);
-    await updateExamSettings(echoId, { reportText: template });
+  const persistReport = async (markReady = false) => {
+    if (!patient?.id || !echoId) {
+      throw new Error("Não existe contexto suficiente para guardar o relatório.");
+    }
+
+    const results = buildFrameResults();
+    if (!hasAnnotatedFrameResults(results)) {
+      throw new Error("Defina pelo menos uma ROI válida antes de gerar o relatório.");
+    }
+
+    setReportLoading(true);
+    setReportError("");
+
     try {
-      const pdfBlob = await generatePdfBlob(template);
-      const formData = new FormData();
-      formData.append("pdf_file", pdfBlob, `report_${patient.id}.pdf`);
-      await createReport(formData, patient.id);
-      setReportCreated(true);
-      addToast("Relatório gerado com sucesso.", "success");
+      await submitExamAnalysis(patient.id, echoId, {
+        results,
+        completed: false,
+        echoName: exam?.description || undefined,
+      });
+
+      const response = await upsertClinicalReport(patient.id, echoId, {
+        results,
+        classification_choice: classificationChoice,
+        validated_summary: validatedSummary,
+        clinical_notes: clinicalNotes,
+        clinical_conclusion: clinicalConclusion,
+        mark_ready: markReady,
+      });
+
+      setReportDraft(response);
+      setValidatedSummary(response.validated_summary || "");
+      setClinicalNotes(response.clinical_notes || "");
+      setClinicalConclusion(response.clinical_conclusion || "");
+      setCompletedSteps((prev) => ({ ...prev, 3: true }));
+      writeStoredClinicalReportDraft(patient.id, echoId, response);
+
+      await updateExamSettings(echoId, {
+        clinicalNotes: response.clinical_notes || "",
+        validatedSummary: response.validated_summary || "",
+        clinicalConclusion: response.clinical_conclusion || "",
+      });
+
+      return response;
+    } catch (error) {
+      const backendReport = error?.response?.data?.report;
+
+      if (backendReport) {
+        setReportDraft(backendReport);
+        writeStoredClinicalReportDraft(patient.id, echoId, backendReport);
+      }
+
+      const message = buildReportErrorMessage(
+        error,
+        "Não foi possível guardar o relatório clínico."
+      );
+
+      setReportError(message);
+      throw new Error(message);
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
+  const handleGenerateReport = async () => {
+    setUnsavedChanges(true);
+    try {
+      await persistReport(false);
+      navigate(`/patients/${patient.id}/reports/${echoId}`);
     } catch (error) {
       console.error("Erro ao gerar o relatório:", error);
-      addToast("Não foi possível gerar o relatório. Verifique os dados e tente novamente.", "error");
+      addToast(error.message || "Não foi possível gerar o relatório.", "error");
     }
   };
 
@@ -404,21 +534,6 @@ export default function AnalysisWizard({
     setClinicalNotes(value);
     setUnsavedChanges(true);
     await updateExamSettings(echoId, { clinicalNotes: value });
-  };
-
-  const generatePdfBlob = async (reportOverride = reportText) => {
-    const echoData = await getEchoResults(patient.id, echoId);
-    const doc = (
-      <ReportPDF
-        data={echoData}
-        patient={patient}
-        medico={user}
-        reportText={reportOverride}
-      />
-    );
-    const asPdf = pdf([]);
-    asPdf.updateContainer(doc);
-    return asPdf.toBlob();
   };
 
   const buildFrameResults = () =>
@@ -497,75 +612,6 @@ export default function AnalysisWizard({
     } catch (error) {
       console.error("Erro ao quantificar a VO:", error);
       addToast("Não foi possível quantificar automaticamente a VO.", "error");
-    }
-  };
-
-  const handleExportPdf = async () => {
-    if (!reportText) return;
-    const pdfBlob = await generatePdfBlob();
-    const url = URL.createObjectURL(pdfBlob);
-    const link = document.createElement("a");
-    const patientSlug =
-      patient?.name?.trim()?.replace(/\s+/g, "_").toLowerCase() || `patient_${patient?.id || "report"}`;
-    link.href = url;
-    link.download = `relatorio_${patientSlug}_${echoId}.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
-
-  const handleUpdateEcho = async () => {
-    try {
-      if (!patient) return;
-      const results = buildFrameResults();
-
-      await updateExamSettings(echoId, {
-        classificationOverride: classificationChoice,
-        validated: isValidated,
-        reportText,
-        clinicalNotes,
-        voOverrideEnabled,
-        voOverrideValue,
-      });
-
-      await createReportIfNeeded(true);
-
-      const payload = {
-        results,
-        completed: true,
-      };
-      const echoName = exam?.description?.trim();
-      if (echoName) {
-        payload.echoName = echoName;
-      }
-
-      const endpoint = `/api/patient/${patient.id}/echocardiogram/${echoId}/submit/`;
-      logDebug("Endpoint de submissão", endpoint);
-      logDebug("Payload de submissão", payload);
-
-      await api.post(endpoint, payload);
-
-      setUnsavedChanges(false);
-      addToast("Resultados submetidos com sucesso.", "success");
-      navigate(`/patients?patient=${patient.id}`);
-    } catch (error) {
-      logDebug("Erro na submissão", error?.response?.data || error);
-      console.error("Erro na submissão dos resultados", error);
-      addToast("Erro ao guardar os resultados.", "error");
-    }
-  };
-
-  const createReportIfNeeded = async (completed) => {
-    if (!completed || !reportText || reportCreated) return;
-    try {
-      const pdfBlob = await generatePdfBlob();
-      const formData = new FormData();
-      formData.append("pdf_file", pdfBlob, `report_${patient.id}.pdf`);
-      await createReport(formData, patient.id);
-      setReportCreated(true);
-    } catch (err) {
-      console.error("Erro ao gerar o relatório:", err);
     }
   };
 
@@ -739,33 +785,34 @@ export default function AnalysisWizard({
         </section>
       )}
 
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.12fr)_minmax(300px,340px)]">
-        <div className="space-y-4">
-          {renderCanvas ? renderCanvas(handleAnnotationChanged) : null}
-          {currentStep === 1 && (
-            <ImageToolsPanel
-              imageSettings={imageSettings}
-              onChange={(nextSettings) => {
-                setAutoEnhanceEnabled(false);
-                onImageSettingsChange(nextSettings);
-              }}
-              onReset={() => {
-                setAutoEnhanceEnabled(false);
-                onImageSettingsChange(defaultImageSettings);
-              }}
-              autoEnhanceEnabled={autoEnhanceEnabled}
-              autoEnhanceLoading={autoEnhanceLoading}
-              onAutoEnhanceApply={handleAutoEnhanceApply}
-              variant="frame-dock"
-            />
-          )}
-          {renderCanvasFooter ? renderCanvasFooter() : null}
-        </div>
-        <aside
-          className={`rounded-lg border border-green-pale bg-white p-5 shadow-sm ${
-            currentStep === 1 ? "lg:sticky lg:top-4" : ""
-          }`}
-        >
+      {currentStep !== 3 ? (
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.12fr)_minmax(300px,340px)]">
+          <div className="space-y-4">
+            {renderCanvas ? renderCanvas(handleAnnotationChanged) : null}
+            {currentStep === 1 && (
+              <ImageToolsPanel
+                imageSettings={imageSettings}
+                onChange={(nextSettings) => {
+                  setAutoEnhanceEnabled(false);
+                  onImageSettingsChange(nextSettings);
+                }}
+                onReset={() => {
+                  setAutoEnhanceEnabled(false);
+                  onImageSettingsChange(defaultImageSettings);
+                }}
+                autoEnhanceEnabled={autoEnhanceEnabled}
+                autoEnhanceLoading={autoEnhanceLoading}
+                onAutoEnhanceApply={handleAutoEnhanceApply}
+                variant="frame-dock"
+              />
+            )}
+            {renderCanvasFooter ? renderCanvasFooter() : null}
+          </div>
+          <aside
+            className={`rounded-lg border border-green-pale bg-white p-5 shadow-sm ${
+              currentStep === 1 ? "lg:sticky lg:top-4" : ""
+            }`}
+          >
           {currentStep === 1 && (
             <div className="space-y-4">
               {activeCandidate && (
@@ -953,22 +1000,18 @@ export default function AnalysisWizard({
               onAutoQuantify={handleAutoQuantifyVO}
             />
           )}
-
-          {currentStep === 3 && (
-            <ClinicalReportStep
-              notes={clinicalNotes}
-              onGenerate={handleGenerateReport}
-              onNotesChange={handleNotesChange}
-              onExport={handleExportPdf}
-              onSubmit={handleUpdateEcho}
-              canGenerate={isValidated}
-              canSubmit={canSubmit}
-              reportReady={Boolean(reportText)}
-              submitLabel="Submeter"
-            />
-          )}
-        </aside>
-      </div>
+          </aside>
+        </div>
+      ) : (
+        <ReportPreparationStep
+          report={reportDraft}
+          reportLoading={reportLoading}
+          reportError={reportError}
+          clinicalNotes={clinicalNotes}
+          onNotesChange={handleNotesChange}
+          onGenerate={handleGenerateReport}
+        />
+      )}
 
       <ToastStack toasts={toasts} onDismiss={(id) => setToasts((prev) => prev.filter((toast) => toast.id !== id))} />
     </div>

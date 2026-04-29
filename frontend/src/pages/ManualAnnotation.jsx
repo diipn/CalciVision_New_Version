@@ -319,6 +319,10 @@ export default function ManualAnnotation() {
       const nextValue =
         typeof updater === 'function' ? updater(currentState[field]) : updater;
 
+      if (Object.is(nextValue, currentState[field])) {
+        return prev;
+      }
+
       return {
         ...prev,
         [examId]: {

@@ -1,11 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+<<<<<<< Updated upstream
 import {
   getClinicalReport,
   getExamSettings,
   quantifyObjectiveVariable,
   submitExamAnalysis,
   upsertClinicalReport,
+=======
+import api, {
+  downloadClinicalReport,
+  getClinicalReport,
+  getExamSettings,
+  quantifyObjectiveVariable,
+  saveClinicalReport,
+>>>>>>> Stashed changes
   updateExamSettings,
 } from "../api";
 import { useUnsavedStore } from "../store/useUnsavedStore";
@@ -17,10 +26,21 @@ import ReportPreparationStep from "./ReportPreparationStep";
 import ToastStack from "./ToastStack";
 import { computeAutoImageSettings } from "../utils/autoImageEnhance";
 import {
+<<<<<<< Updated upstream
   readStoredClinicalReportDraft,
   clearStoredClinicalReportDraft,
   writeStoredClinicalReportDraft,
 } from "../utils/clinicalReportDraft";
+=======
+  buildClinicalReportDraft,
+  buildReportFilename,
+  extractClinicalReportMeta,
+  getInitialClinicalReportInputs,
+  getReportStatusLabel,
+  isClinicalReportReady,
+  normalizeObjectiveVariable,
+} from "../utils/clinicalReport";
+>>>>>>> Stashed changes
 
 const VO_THRESHOLD = 30;
 
@@ -93,12 +113,28 @@ export default function AnalysisWizard({
   const [completedSteps, setCompletedSteps] = useState({});
   const [classificationChoice, setClassificationChoice] = useState(null);
   const [isValidated, setIsValidated] = useState(false);
+<<<<<<< Updated upstream
   const [reportDraft, setReportDraft] = useState(null);
   const [reportError, setReportError] = useState("");
   const [reportLoading, setReportLoading] = useState(false);
   const [clinicalNotes, setClinicalNotes] = useState("");
   const [validatedSummary, setValidatedSummary] = useState("");
   const [clinicalConclusion, setClinicalConclusion] = useState("");
+=======
+  const [reportInputs, setReportInputs] = useState({
+    valveObservations: "",
+    validationNotes: "",
+    conclusion: "",
+  });
+  const [reportMeta, setReportMeta] = useState({
+    reportId: null,
+    status: null,
+    title: "",
+    hasPdf: false,
+    lastError: "",
+    updatedAt: null,
+  });
+>>>>>>> Stashed changes
   const [voOverrideEnabled, setVoOverrideEnabled] = useState(false);
   const [voOverrideValue, setVoOverrideValue] = useState(null);
   const [voManualUiEnabled, setVoManualUiEnabled] = useState(false);
@@ -109,6 +145,13 @@ export default function AnalysisWizard({
   const [autoEnhanceLoading, setAutoEnhanceLoading] = useState(false);
   const [classificationTouched, setClassificationTouched] = useState(false);
   const [toasts, setToasts] = useState([]);
+<<<<<<< Updated upstream
+=======
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const [isExportingReport, setIsExportingReport] = useState(false);
+  const [isSubmittingAnalysis, setIsSubmittingAnalysis] = useState(false);
+  const [reportNeedsExportRefresh, setReportNeedsExportRefresh] = useState(false);
+>>>>>>> Stashed changes
 
   const annotationRevision = useRef(0);
   const confirmedAnnotationRevision = useRef(0);
@@ -132,6 +175,25 @@ export default function AnalysisWizard({
   const isComparisonMode = comparisonCandidates.length > 1;
   const activeCandidate = comparisonCandidates.find((candidate) => candidate.id === activeExamId);
   const selectedCandidate = comparisonCandidates.find((candidate) => candidate.id === selectedExamId);
+  const reportPreviewData = useMemo(
+    () =>
+      buildClinicalReportDraft({
+        patient,
+        exam,
+        user,
+        frames,
+        rects,
+        calcification,
+        classificationChoice,
+        voValue: voEffective,
+        inputs: reportInputs,
+        isValidated,
+      }),
+    [patient, exam, user, frames, rects, calcification, classificationChoice, voEffective, reportInputs, isValidated]
+  );
+  const reportReady = Boolean(reportMeta.reportId) && isClinicalReportReady(reportPreviewData);
+  const canSubmit = completedSteps[1] && completedSteps[2] && isValidated && reportReady;
+  const canExport = reportReady && !reportNeedsExportRefresh;
 
   const addToast = (message, type = "info") => {
     const id = `${Date.now()}-${Math.random()}`;
@@ -154,12 +216,28 @@ export default function AnalysisWizard({
     setCompletedSteps({});
     setClassificationChoice(null);
     setIsValidated(false);
+<<<<<<< Updated upstream
     setReportDraft(null);
     setReportError("");
     setReportLoading(false);
     setClinicalNotes("");
     setValidatedSummary("");
     setClinicalConclusion("");
+=======
+    setReportInputs({
+      valveObservations: "",
+      validationNotes: "",
+      conclusion: "",
+    });
+    setReportMeta({
+      reportId: null,
+      status: null,
+      title: "",
+      hasPdf: false,
+      lastError: "",
+      updatedAt: null,
+    });
+>>>>>>> Stashed changes
     setVoOverrideEnabled(false);
     setVoOverrideValue(null);
     setVoManualUiEnabled(false);
@@ -170,6 +248,13 @@ export default function AnalysisWizard({
     setAutoEnhanceLoading(false);
     setClassificationTouched(false);
     setToasts([]);
+<<<<<<< Updated upstream
+=======
+    setIsGeneratingReport(false);
+    setIsExportingReport(false);
+    setIsSubmittingAnalysis(false);
+    setReportNeedsExportRefresh(false);
+>>>>>>> Stashed changes
 
     annotationRevision.current = 0;
     confirmedAnnotationRevision.current = 0;
@@ -194,9 +279,19 @@ export default function AnalysisWizard({
           setClassificationTouched(true);
         }
         setIsValidated(Boolean(settings.validated));
+<<<<<<< Updated upstream
         setClinicalNotes(settings.clinicalNotes || "");
         setValidatedSummary(settings.validatedSummary || "");
         setClinicalConclusion(settings.clinicalConclusion || "");
+=======
+        setReportInputs(
+          settings.reportInputs || {
+            valveObservations: settings.clinicalNotes || "",
+            validationNotes: "",
+            conclusion: "",
+          }
+        );
+>>>>>>> Stashed changes
         setVoOverrideEnabled(Boolean(settings.voOverrideEnabled));
         if (settings.voOverrideValue !== undefined && settings.voOverrideValue !== null) {
           setVoOverrideValue(Number(settings.voOverrideValue));
@@ -208,6 +303,7 @@ export default function AnalysisWizard({
   }, [echoId]);
 
   useEffect(() => {
+<<<<<<< Updated upstream
     const hydrateReport = async () => {
       if (!patient?.id || !echoId) return;
       try {
@@ -248,6 +344,31 @@ export default function AnalysisWizard({
     };
 
     hydrateReport();
+=======
+    const hydratePersistedReport = async () => {
+      if (!patient?.id || !echoId) return;
+
+      try {
+        const report = await getClinicalReport(patient.id, echoId);
+        if (!report) return;
+
+        setReportMeta(extractClinicalReportMeta(report));
+        setReportInputs((prev) => ({
+          ...prev,
+          ...getInitialClinicalReportInputs(report.report_data),
+        }));
+        if (report.status === "READY") {
+          setReportNeedsExportRefresh(false);
+        }
+      } catch (error) {
+        if (error?.response?.status !== 404) {
+          console.error("Erro ao carregar o relatório clínico persistido:", error);
+        }
+      }
+    };
+
+    hydratePersistedReport();
+>>>>>>> Stashed changes
   }, [patient?.id, echoId]);
 
   useEffect(() => {
@@ -259,6 +380,7 @@ export default function AnalysisWizard({
       const parsed = JSON.parse(saved);
       if (parsed?.step) {
         setCurrentStep(parsed.step);
+<<<<<<< Updated upstream
         setCompletedSteps((prev) => {
           const next = {
             ...prev,
@@ -271,6 +393,17 @@ export default function AnalysisWizard({
           }
 
           return next;
+=======
+      }
+      if (parsed?.reportInputs) {
+        setReportInputs((prev) => ({ ...prev, ...parsed.reportInputs }));
+      }
+      if (parsed?.step || parsed?.reportReady) {
+        setCompletedSteps({
+          1: parsed?.step >= 2,
+          2: parsed?.step >= 3,
+          3: Boolean(parsed?.reportReady),
+>>>>>>> Stashed changes
         });
       }
     } catch (error) {
@@ -280,6 +413,7 @@ export default function AnalysisWizard({
 
   useEffect(() => {
     if (!progressHydrated.current) return;
+<<<<<<< Updated upstream
     setCompletedSteps((prev) => {
       const nextStep2 = isValidated || prev[2];
       const nextStep3 = Boolean(reportDraft);
@@ -295,6 +429,14 @@ export default function AnalysisWizard({
       };
     });
   }, [isValidated, reportDraft]);
+=======
+    setCompletedSteps((prev) => ({
+      ...prev,
+      2: isValidated || prev[2],
+      3: reportReady ? true : prev[3],
+    }));
+  }, [isValidated, reportReady]);
+>>>>>>> Stashed changes
 
   useEffect(() => {
     if (!echoId) return;
@@ -302,11 +444,20 @@ export default function AnalysisWizard({
       step: currentStep,
       rects,
       calcification,
+<<<<<<< Updated upstream
       hasReportDraft: Boolean(reportDraft),
       updatedAt: new Date().toISOString(),
     };
     localStorage.setItem(`exam-progress-${echoId}`, JSON.stringify(payload));
   }, [echoId, currentStep, rects, calcification, reportDraft]);
+=======
+      reportInputs,
+      reportReady,
+      updatedAt: new Date().toISOString(),
+    };
+    localStorage.setItem(`exam-progress-${echoId}`, JSON.stringify(payload));
+  }, [echoId, currentStep, rects, calcification, reportInputs, reportReady]);
+>>>>>>> Stashed changes
 
   useEffect(() => {
     if (voBase !== null && !voOverrideEnabled && voOverrideValue === null) {

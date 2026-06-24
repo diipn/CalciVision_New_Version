@@ -78,10 +78,17 @@ class EchoFrameData(models.Model):
     def __str__(self):
         return f"Data for frame {self.frame.frame_index} of {self.frame.echocardiogram.patient.name}"
 
+<<<<<<< Updated upstream
 class ClinicalReport(models.Model):
 
     class Status(models.TextChoices):
         DRAFT = 'DRAFT', 'Draft'
+=======
+class ReportPdf(models.Model):
+    class Status(models.TextChoices):
+        AUTO_GENERATED = 'AUTO_GENERATED', 'Auto Generated'
+        USER_REVIEWED = 'USER_REVIEWED', 'User Reviewed'
+>>>>>>> Stashed changes
         READY = 'READY', 'Ready'
         FAILED = 'FAILED', 'Failed'
 
@@ -94,6 +101,7 @@ class ClinicalReport(models.Model):
         null=True,
     )
     doctor = models.ForeignKey(to=CustomUser, on_delete=models.CASCADE, related_name='reports')
+<<<<<<< Updated upstream
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     content = models.JSONField(default=dict, blank=True)
     source_snapshot = models.JSONField(default=dict, blank=True)
@@ -107,6 +115,27 @@ class ClinicalReport(models.Model):
     validated_at = models.DateTimeField(blank=True, null=True)
     pdf_generated_at = models.DateTimeField(blank=True, null=True)
     
+=======
+    echocardiogram = models.ForeignKey(
+        to=Echocardiogram,
+        on_delete=models.CASCADE,
+        related_name='reports',
+        blank=True,
+        null=True,
+    )
+    title = models.CharField(max_length=255, blank=True, default='')
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.AUTO_GENERATED)
+    report_data = models.JSONField(default=dict, blank=True)
+    has_calcification = models.BooleanField(blank=True, null=True)
+    objective_variable = models.FloatField(blank=True, null=True)
+    last_error = models.TextField(blank=True, default='')
+    generated_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    validated_at = models.DateTimeField(blank=True, null=True)
+    pdf_generated_at = models.DateTimeField(blank=True, null=True)
+    pdf_file = models.FileField(upload_to='reports/', blank=True, null=True)
+
+>>>>>>> Stashed changes
     @property
     def pdf_name(self):
         if not self.pdf_file:
@@ -119,7 +148,23 @@ class ClinicalReport(models.Model):
             return round(self.pdf_file.size / 1024, 2)
         return 0
 
+    @property
+    def has_pdf(self):
+        return bool(self.pdf_file)
+
     def __str__(self):
+<<<<<<< Updated upstream
         exam_id = self.echocardiogram_id or 'legacy'
         return f"Clinical report {self.id} for {self.patient.name} / exam {exam_id}"
+=======
+        return f"Report for {self.patient.name} by {self.doctor.username}"
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['patient', 'doctor', 'echocardiogram'],
+                name='unique_report_per_exam_and_doctor',
+            )
+        ]
+>>>>>>> Stashed changes
     

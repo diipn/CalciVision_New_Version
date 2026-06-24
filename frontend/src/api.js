@@ -38,6 +38,18 @@ export const getReports = async (patientId) => {
   }
 };
 
+export const getClinicalReport = async (patientId, echoId) => {
+  try {
+    const response = await api.get(`/api/reports/${patientId}/`, {
+      params: echoId ? { echo_id: echoId } : undefined,
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching clinical report:", error);
+    throw error;
+  }
+};
+
 export const deletePatient = async (patientId) => {
   try {
     const response = await api.delete(`/api/patient/${patientId}/delete/`);
@@ -92,6 +104,7 @@ export const createPatient = async (patientData) => {
   }
 };
 
+<<<<<<< Updated upstream
 export const getClinicalReport = async (patientId, echoId) => {
   try {
     const response = await api.get(`/api/patient/${patientId}/echocardiogram/${echoId}/report/`);
@@ -128,9 +141,28 @@ export const upsertClinicalReport = async (patientId, echoId, payload) => {
 export const createReport = async (reportData, patientId) => {
   try {
     const response = await api.post(`/api/reports/${patientId}/create/`, reportData);
+=======
+export const saveClinicalReport = async (patientId, payload) => {
+  try {
+    const response = await api.post(`/api/reports/${patientId}/create/`, payload);
+>>>>>>> Stashed changes
     return response.data;
   } catch (error) {
-    console.error("Error creating report:", error);
+    console.error("Error saving clinical report:", error);
+    throw error;
+  }
+};
+
+export const createReport = async (formData, patientId) => saveClinicalReport(patientId, formData);
+
+export const downloadClinicalReport = async (reportId) => {
+  try {
+    const response = await api.get(`/api/report/${reportId}/download/`, {
+      responseType: "blob",
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error downloading clinical report:", error);
     throw error;
   }
 };

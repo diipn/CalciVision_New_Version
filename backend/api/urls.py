@@ -28,6 +28,10 @@ urlpatterns = [
     path('reports/', views.list_reports, name='list_reports'),
     path('reports/<int:patient_id>/create/', views.create_report, name='create_report'),
     path('reports/<int:patient_id>/', views.get_report, name='get_report'),
+<<<<<<< Updated upstream
     path('report/<int:report_id>/export/', views.export_report_pdf, name='export_report_pdf'),
+=======
+    path('report/<int:report_id>/download/', views.download_report, name='download_report'),
+>>>>>>> Stashed changes
     path('report/<int:report_id>/delete/', views.delete_report, name='delete_report'),
 ]

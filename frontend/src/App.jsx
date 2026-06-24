@@ -28,7 +28,7 @@ function RegisterAndLogout() {
 
 function App() {
   return (
-    <Router>
+    <Router future={{ v7_relativeSplatPath: true }}>
       <div className="app">
         <UserProvider>
           <Routes>

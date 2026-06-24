@@ -269,35 +269,45 @@ def process_echocardiogram(dicom, patient):
     
     dicom_index = Echocardiogram.objects.filter(patient=patient).count() + 1
     dicom_name = f'DCM-{patient.pk}-{dicom_index}.dcm'
-            
+
     # Recria o ficheiro com um nome diferente
-    dicom_file = ContentFile(dicom.read(), name=dicom_name)
-            
-    echo = Echocardiogram.objects.create(
-        patient=patient,
-        dicom_file=dicom_file,
-        description=f'Echocardiogram #{dicom_index}',
-    )
-            
-    dicom_path = os.path.join(settings.MEDIA_ROOT, str(echo.dicom_file))
-            
-    frames = extrair_frames(dicom_path)
-    if not frames:
-        echo.delete()
-        raise ValueError("Nenhum frame extraído do DICOM.")
-    
-    for frame_array, idx in frames:
-        # Converte para JPEG em memória
-        img_io = BytesIO()
-        Image.fromarray(frame_array).save(img_io, format='JPEG')
-        img_content = ContentFile(img_io.getvalue(), name=f"FRM-{echo.pk}-{idx:03d}.jpg")
-        
-        # Cria o EchoFrame - o Django salvará com o path correto via upload_to
-        EchoFrame.objects.create(
-            echocardiogram=echo,
-            image=img_content,
-            frame_index=idx,
+    dicom_bytes = dicom.read()
+    if not dicom_bytes:
+        raise ValueError("O ficheiro DICOM enviado está vazio.")
+
+    dicom_file = ContentFile(dicom_bytes, name=dicom_name)
+    echo = None
+
+    try:
+        echo = Echocardiogram.objects.create(
+            patient=patient,
+            dicom_file=dicom_file,
+            description=f'Echocardiogram #{dicom_index}',
         )
+
+        dicom_path = os.path.join(settings.MEDIA_ROOT, str(echo.dicom_file))
+
+        frames = extrair_frames(dicom_path)
+        if not frames:
+            raise ValueError("Nenhum frame extraído do DICOM.")
+
+        for frame_array, idx in frames:
+            # Converte para JPEG em memória
+            img_io = BytesIO()
+            Image.fromarray(frame_array).save(img_io, format='JPEG')
+            img_content = ContentFile(img_io.getvalue(), name=f"FRM-{echo.pk}-{idx:03d}.jpg")
+
+            # Cria o EchoFrame - o Django salvará com o path correto via upload_to
+            EchoFrame.objects.create(
+                echocardiogram=echo,
+                image=img_content,
+                frame_index=idx,
+            )
+    except Exception:
+        if echo is not None:
+            echo.delete()
+        raise
+
     return echo
     
 
@@ -306,8 +316,12 @@ def process_echocardiogram(dicom, patient):
 def ler_dicom(dicom_path):
     """Lê um DICOM e extrai a imagem como array numpy"""
     import pydicom
+    from pydicom.errors import InvalidDicomError
 
-    dicom = pydicom.dcmread(dicom_path, force=True)
+    try:
+        dicom = pydicom.dcmread(dicom_path)
+    except InvalidDicomError:
+        dicom = pydicom.dcmread(dicom_path, force=True)
 
     transfer_syntax = getattr(getattr(dicom, "file_meta", None), "TransferSyntaxUID", None)
     sop_class_uid = getattr(dicom, "SOPClassUID", None)
@@ -335,8 +349,13 @@ def ler_dicom(dicom_path):
             ) from exc
 
     if "PixelData" not in dicom:
+        if not transfer_syntax and not sop_class_uid and not modality:
+            raise ValueError(
+                "O ficheiro enviado não parece ser um DICOM de imagem válido. "
+                "Confirme que carregou o ficheiro .dcm original do ecocardiograma."
+            )
         raise ValueError(
-            f"O DICOM não contém PixelData. {_contexto_dicom()}."
+            f"O DICOM não contém PixelData e não tem imagem para extrair. {_contexto_dicom()}."
         )
     
     # Tenta obter a imagem
@@ -378,19 +397,32 @@ def extrair_frames(dicom_path) -> list[tuple[np.ndarray, int]]:
     num_frames = getattr(dicom, "NumberOfFrames", None)
     output = []
 
-    if len(img_array.shape) == 3 and num_frames and num_frames > 1:
+    def _prepare_frame(frame):
+        if frame.ndim == 2:
+            frame = cv2_lib.cvtColor(frame, cv2_lib.COLOR_GRAY2RGB)
+        elif frame.ndim == 3:
+            if frame.shape[-1] == 4:
+                frame = frame[:, :, :3]
+            elif frame.shape[-1] != 3:
+                raise ValueError("Formato de frame colorido inesperado.")
+        else:
+            raise ValueError("Formato de frame inesperado.")
+
+        frame = cortar_margens(frame)
+        frame = padronizar_frame(frame)
+        return frame
+
+    if num_frames and num_frames > 1:
         print(f"Extraindo {num_frames} frames de {dicom_path}")
         for idx in range(num_frames):
-            if img_array.shape[0] == num_frames:
+            if img_array.ndim in (3, 4) and img_array.shape[0] == num_frames:
                 frame = img_array[idx]
-            elif img_array.shape[2] == num_frames:
+            elif img_array.ndim == 3 and img_array.shape[2] == num_frames:
                 frame = img_array[:, :, idx]
             else:
                 raise ValueError("Formato de frames inesperado.")
 
-            frame = cv2_lib.cvtColor(frame, cv2_lib.COLOR_GRAY2RGB)
-            frame = cortar_margens(frame)
-            frame = padronizar_frame(frame)
+            frame = _prepare_frame(frame)
 
             if frame.shape[0] == 0 or frame.shape[1] == 0:
                 continue
@@ -398,11 +430,7 @@ def extrair_frames(dicom_path) -> list[tuple[np.ndarray, int]]:
             output.append((frame, idx + 1))
 
     else:
-        frame = img_array
-        if frame.ndim == 2:
-            frame = cv2_lib.cvtColor(frame, cv2_lib.COLOR_GRAY2RGB)
-        frame = cortar_margens(frame)
-        frame = padronizar_frame(frame)
+        frame = _prepare_frame(img_array)
         output.append((frame, 1))
     
     if not output:

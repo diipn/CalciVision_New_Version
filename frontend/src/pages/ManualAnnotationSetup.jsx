@@ -185,7 +185,9 @@ export default function ManualAnnotationSetup() {
           );
         }
       } else {
-        setUploadError("Não foi possível carregar os ficheiros. Tente novamente.");
+        setUploadError(
+          "Não foi possível ligar ao backend em http://localhost:8000. Confirme que o servidor está ligado e tente novamente."
+        );
       }
     } finally {
       setUploading(false);

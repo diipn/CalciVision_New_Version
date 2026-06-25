@@ -343,7 +343,7 @@ export default function PainelTemporal() {
           </div>
         ) : (
           <>
-            <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-4">
+            <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
               <div className="rounded-2xl border border-gray-200 bg-white p-4">
                 <p className="text-sm text-gray-medium">Evolução geral</p>
                 <p className="mt-1 text-2xl font-semibold text-gray-dark">
@@ -368,12 +368,6 @@ export default function PainelTemporal() {
                 <p className="text-sm text-gray-medium">Maior progressão</p>
                 <p className="mt-1 text-2xl font-semibold text-gray-dark">{summary.topName}</p>
                 <p className="mt-2 text-sm text-gray-medium">Paciente com a maior taxa no período selecionado.</p>
-              </div>
-
-              <div className="rounded-2xl border border-gray-200 bg-white p-4">
-                <p className="text-sm text-gray-medium">Sugestões preparadas</p>
-                <p className="mt-1 text-2xl font-semibold text-gray-dark">{summary.suggested}</p>
-                <p className="mt-2 text-sm text-gray-medium">Pacientes com próxima ação sugerida pela estrutura temporal.</p>
               </div>
             </div>
 

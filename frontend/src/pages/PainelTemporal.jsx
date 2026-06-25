@@ -421,16 +421,6 @@ export default function PainelTemporal() {
                     <option value="asc">Ascendente</option>
                   </select>
                 </div>
-
-                <div className="flex flex-wrap items-center gap-2 justify-start lg:justify-end">
-                  <Chip tone="neutral">
-                    Aviso: {period === "annual" ? thresholds.annual_warn : thresholds.monthly_warn}%
-                  </Chip>
-                  <Chip tone="neutral">
-                    Crítico: {period === "annual" ? thresholds.annual_high : thresholds.monthly_high}%
-                  </Chip>
-                  <Chip tone="neutral">VO alta: ≥ {formatValue(thresholds.value_high)}</Chip>
-                </div>
               </div>
             </div>
 

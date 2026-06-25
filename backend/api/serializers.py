@@ -47,7 +47,6 @@ class EchocardiogramSerializer(serializers.ModelSerializer):
 
 class ClinicalReportSummarySerializer(serializers.ModelSerializer):
     doctor = UserSerializer(read_only=True)
-<<<<<<< Updated upstream
     is_exportable = serializers.SerializerMethodField()
     validation_issues = serializers.SerializerMethodField()
     exam_description = serializers.SerializerMethodField()
@@ -61,23 +60,11 @@ class ClinicalReportSummarySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ClinicalReport
-=======
-    report_url = serializers.SerializerMethodField()
-    exam_id = serializers.IntegerField(source='echocardiogram_id', read_only=True)
-    exam_description = serializers.CharField(source='echocardiogram.description', read_only=True)
-    has_pdf = serializers.BooleanField(read_only=True)
-    examId = serializers.IntegerField(source='echocardiogram_id', read_only=True)
-    hasCalcification = serializers.BooleanField(source='has_calcification', read_only=True)
-    
-    class Meta:
-        model = ReportPdf
->>>>>>> Stashed changes
         fields = [
             'id',
             'patient',
             'doctor',
             'echocardiogram',
-<<<<<<< Updated upstream
             'status',
             'pdf_name',
             'pdf_size',
@@ -170,34 +157,6 @@ class ClinicalReportDetailSerializer(ClinicalReportSummarySerializer):
         ]
 
 
-=======
-            'exam_id',
-            'examId',
-            'exam_description',
-            'title',
-            'status',
-            'report_data',
-            'has_calcification',
-            'hasCalcification',
-            'objective_variable',
-            'report_url',
-            'pdf_name',
-            'pdf_size',
-            'has_pdf',
-            'generated_at',
-            'updated_at',
-            'validated_at',
-            'pdf_generated_at',
-            'last_error',
-        ]
-    
-    def get_report_url(self, obj):
-        request: HttpRequest = self.context.get('request')
-        if not obj.pdf_file:
-            return None
-        return request.build_absolute_uri(obj.pdf_file.url) if request else obj.pdf_file.url
-    
->>>>>>> Stashed changes
 class PatientSerializer(serializers.ModelSerializer):
     doctor = UserSerializer(read_only=True)
     echocardiograms = EchocardiogramSerializer(many=True, read_only=True)

@@ -11,6 +11,48 @@ const formatDateLabel = (date = new Date()) => {
   });
 };
 
+const UPLOAD_ALLOWED_EXTENSIONS = new Set(["", "dcm", "dicom", "ima", "png", "jpg", "jpeg", "gif", "bmp", "tif", "tiff"]);
+const UPLOAD_ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/bmp", "image/tiff"]);
+
+const getFileExtension = (filename = "") => {
+  const normalized = filename.trim().toLowerCase();
+  if (!normalized || !normalized.includes(".")) return "";
+  return normalized.split(".").pop();
+};
+
+const isLikelySupportedUpload = (file) => {
+  if (!file || file.size <= 0) return false;
+  if (file.name?.startsWith("._")) return false;
+
+  const extension = getFileExtension(file.name);
+  if (UPLOAD_ALLOWED_EXTENSIONS.has(extension)) return true;
+  if (UPLOAD_ALLOWED_IMAGE_TYPES.has(file.type)) return true;
+
+  return file.type === "application/dicom" || file.type === "application/octet-stream";
+};
+
+const formatUploadFailure = (failure) => {
+  if (!failure) return null;
+  const filename = failure.filename ? `${failure.filename}: ` : "";
+  return `${filename}${failure.error || "ficheiro rejeitado."}`;
+};
+
+const buildUploadErrorMessage = (error) => {
+  const responseData = error?.response?.data;
+  const failures = Array.isArray(responseData?.errors)
+    ? responseData.errors.map(formatUploadFailure).filter(Boolean)
+    : [];
+
+  if (failures.length > 0) {
+      return `Não foi possível processar o ficheiro. ${failures.join(" ")}`;
+  }
+
+  const serverError = responseData?.error;
+  return serverError
+    ? `Não foi possível processar o ficheiro. ${serverError}`
+    : "Não foi possível processar o ficheiro. Verifique o ficheiro e tente novamente.";
+};
+
 export default function ManualAnnotationSetup() {
   const [patients, setPatients] = useState([]);
   const [selectedPatientId, setSelectedPatientId] = useState("");
@@ -83,9 +125,32 @@ export default function ManualAnnotationSetup() {
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
 
-    setSelectedFiles((prev) => [...prev, ...files]);
+    const acceptedFiles = files.filter(isLikelySupportedUpload);
+    const rejectedFiles = files.filter((file) => !isLikelySupportedUpload(file));
+
+    if (rejectedFiles.length > 0) {
+      setUploadError(
+        `Ficheiro(s) rejeitado(s): ${rejectedFiles
+          .map((file) => file.name || "sem nome")
+          .join(", ")}. Carregue ficheiros DICOM (.dcm, .dicom ou .ima) ou imagens para anotação manual (.png, .jpg, .jpeg, .gif, .bmp ou .tif).`
+      );
+    } else {
+      setUploadError("");
+    }
+
+    if (!acceptedFiles.length) {
+      setAnalysisSequence([]);
+      setSelectedEchoId("");
+      setUploadSuccess(false);
+      setUploadCount(0);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+      return;
+    }
+
+    setSelectedFiles((prev) => [...prev, ...acceptedFiles]);
     setAnalysisSequence([]);
-    setUploadError("");
     setSelectedEchoId("");
     setUploadSuccess(false);
     setUploadCount(0);
@@ -111,7 +176,7 @@ export default function ManualAnnotationSetup() {
       return;
     }
     if (!files?.length) {
-      setUploadError("Seleccione ficheiros DICOM antes de carregar.");
+      setUploadError("Seleccione ficheiros DICOM ou imagens antes de carregar.");
       return;
     }
 
@@ -170,15 +235,7 @@ export default function ManualAnnotationSetup() {
         if (status === 401) {
           setUploadError("Sessão expirada. Inicie sessão novamente.");
         } else if (status === 400) {
-          const serverError =
-            error?.response?.data?.error ||
-            error?.response?.data?.errors?.[0]?.error ||
-            null;
-          setUploadError(
-            serverError
-              ? `Não foi possível processar o DICOM. ${serverError}`
-              : "Não foi possível processar o DICOM. Verifique o ficheiro e tente novamente."
-          );
+          setUploadError(buildUploadErrorMessage(error));
         } else {
           setUploadError(
             `Erro ao carregar ficheiros (HTTP ${status}). Tente novamente.`
@@ -338,7 +395,7 @@ export default function ManualAnnotationSetup() {
                               <p className="truncate text-xs font-semibold text-gray-700">
                                 {file.name}
                               </p>
-                              <p className="text-xs text-gray-500">Ficheiro DICOM</p>
+                              <p className="text-xs text-gray-500">DICOM ou imagem</p>
                             </div>
                             <button
                               type="button"
@@ -369,14 +426,14 @@ export default function ManualAnnotationSetup() {
                             </svg>
                           </span>
                           <span className="text-xs font-semibold text-gray-600">
-                            Adicionar ficheiros DICOM
+                            Adicionar DICOM/imagens
                           </span>
                           <input
                             id="dicomUpload"
                             ref={fileInputRef}
                             type="file"
                             multiple
-                            accept=".dcm,application/dicom"
+                            accept=".dcm,.dicom,.ima,.png,.jpg,.jpeg,.gif,.bmp,.tif,.tiff,application/dicom,image/png,image/jpeg,image/gif,image/bmp,image/tiff"
                             className="hidden"
                             onChange={handleFileSelection}
                             disabled={!selectedPatientId || uploading}

@@ -7,7 +7,7 @@ import os
 import numpy as np
 import json
 from datetime import date, datetime
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 from io import BytesIO
 
 try:
@@ -18,6 +18,14 @@ except ModuleNotFoundError:
 OBJECTIVE_VARIABLE_BLACK_THRESHOLD = 10
 OBJECTIVE_VARIABLE_GRAY_THRESHOLD = 120
 OBJECTIVE_VARIABLE_WHITE_THRESHOLD = 200
+IMAGE_UPLOAD_EXTENSIONS = {
+    "PNG": "png",
+    "JPEG": "jpg",
+    "JPG": "jpg",
+    "GIF": "gif",
+    "BMP": "bmp",
+    "TIFF": "tif",
+}
 
 TEMPORAL_PRIORITY_THRESHOLDS = {
     'monthly_warn': 4.0,
@@ -264,18 +272,51 @@ def frame_image_upload_path(instance, filename: str):
     return os.path.join('frames', dicom_name, filename)
 
 
+def _read_uploaded_image(upload_bytes: bytes) -> tuple[np.ndarray, str] | None:
+    try:
+        with Image.open(BytesIO(upload_bytes)) as image:
+            image_format = (image.format or "").upper()
+            if image_format not in IMAGE_UPLOAD_EXTENSIONS:
+                return None
+            if getattr(image, "is_animated", False):
+                image.seek(0)
+            return np.array(image.convert("RGB")), IMAGE_UPLOAD_EXTENSIONS[image_format]
+    except (OSError, UnidentifiedImageError, ValueError):
+        return None
+
+
+def _prepare_frame_array(frame: np.ndarray) -> np.ndarray:
+    cv2_lib = _require_cv2()
+    if frame.ndim == 2:
+        frame = cv2_lib.cvtColor(frame, cv2_lib.COLOR_GRAY2RGB)
+    elif frame.ndim == 3:
+        if frame.shape[-1] == 4:
+            frame = frame[:, :, :3]
+        elif frame.shape[-1] != 3:
+            raise ValueError("Formato de frame colorido inesperado.")
+    else:
+        raise ValueError("Formato de frame inesperado.")
+
+    frame = cortar_margens(frame)
+    frame = padronizar_frame(frame)
+    return frame
+
+
 def process_echocardiogram(dicom, patient):
     from api.models import Echocardiogram, EchoFrame
     
     dicom_index = Echocardiogram.objects.filter(patient=patient).count() + 1
-    dicom_name = f'DCM-{patient.pk}-{dicom_index}.dcm'
 
     # Recria o ficheiro com um nome diferente
     dicom_bytes = dicom.read()
     if not dicom_bytes:
         raise ValueError("O ficheiro DICOM enviado está vazio.")
 
-    dicom_file = ContentFile(dicom_bytes, name=dicom_name)
+    uploaded_image = _read_uploaded_image(dicom_bytes)
+    source_ext = uploaded_image[1] if uploaded_image else "dcm"
+    source_prefix = "IMG" if uploaded_image else "DCM"
+    source_name = f'{source_prefix}-{patient.pk}-{dicom_index}.{source_ext}'
+    dicom_file = ContentFile(dicom_bytes, name=source_name)
     echo = None
 
     try:
@@ -285,9 +326,11 @@ def process_echocardiogram(dicom, patient):
             description=f'Echocardiogram #{dicom_index}',
         )
 
-        dicom_path = os.path.join(settings.MEDIA_ROOT, str(echo.dicom_file))
-
-        frames = extrair_frames(dicom_path)
+        if uploaded_image:
+            frames = [(_prepare_frame_array(uploaded_image[0]), 1)]
+        else:
+            dicom_path = os.path.join(settings.MEDIA_ROOT, str(echo.dicom_file))
+            frames = extrair_frames(dicom_path)
         if not frames:
             raise ValueError("Nenhum frame extraído do DICOM.")
 
@@ -333,6 +376,28 @@ def ler_dicom(dicom_path):
         modality_value = str(modality) if modality else "Unknown"
         return f"TransferSyntaxUID={ts_value} | SOPClassUID={sop_value} | Modality={modality_value}"
 
+    def _file_signature_hint() -> str | None:
+        try:
+            with open(dicom_path, "rb") as file:
+                header = file.read(16)
+        except OSError:
+            return None
+
+        signatures = (
+            (b"%PDF", "um PDF"),
+            (b"PK\x03\x04", "um ficheiro ZIP"),
+            (b"\xff\xd8\xff", "uma imagem JPEG"),
+            (b"\x89PNG\r\n\x1a\n", "uma imagem PNG"),
+            (b"GIF87a", "uma imagem GIF"),
+            (b"GIF89a", "uma imagem GIF"),
+            (b"{", "um ficheiro JSON/texto"),
+            (b"<", "um ficheiro HTML/XML/texto"),
+        )
+        for prefix, label in signatures:
+            if header.startswith(prefix):
+                return label
+        return None
+
     is_compressed = False
     if transfer_syntax is not None:
         try:
@@ -350,6 +415,12 @@ def ler_dicom(dicom_path):
 
     if "PixelData" not in dicom:
         if not transfer_syntax and not sop_class_uid and not modality:
+            signature_hint = _file_signature_hint()
+            if signature_hint:
+                raise ValueError(
+                    f"O ficheiro enviado parece ser {signature_hint}, não um DICOM de imagem. "
+                    "Carregue o ficheiro .dcm original exportado pelo equipamento de ecocardiografia."
+                )
             raise ValueError(
                 "O ficheiro enviado não parece ser um DICOM de imagem válido. "
                 "Confirme que carregou o ficheiro .dcm original do ecocardiograma."
@@ -392,25 +463,9 @@ def extrair_frames(dicom_path) -> list[tuple[np.ndarray, int]]:
     Extrai e processa os frames do DICOM sem salvá-los no disco.
     Retorna uma lista de tuplos: (frame_em_numpy, índice).
     """
-    cv2_lib = _require_cv2()
     dicom, img_array = ler_dicom(dicom_path)
     num_frames = getattr(dicom, "NumberOfFrames", None)
     output = []
-
-    def _prepare_frame(frame):
-        if frame.ndim == 2:
-            frame = cv2_lib.cvtColor(frame, cv2_lib.COLOR_GRAY2RGB)
-        elif frame.ndim == 3:
-            if frame.shape[-1] == 4:
-                frame = frame[:, :, :3]
-            elif frame.shape[-1] != 3:
-                raise ValueError("Formato de frame colorido inesperado.")
-        else:
-            raise ValueError("Formato de frame inesperado.")
-
-        frame = cortar_margens(frame)
-        frame = padronizar_frame(frame)
-        return frame
 
     if num_frames and num_frames > 1:
         print(f"Extraindo {num_frames} frames de {dicom_path}")
@@ -422,7 +477,7 @@ def extrair_frames(dicom_path) -> list[tuple[np.ndarray, int]]:
             else:
                 raise ValueError("Formato de frames inesperado.")
 
-            frame = _prepare_frame(frame)
+            frame = _prepare_frame_array(frame)
 
             if frame.shape[0] == 0 or frame.shape[1] == 0:
                 continue
@@ -430,7 +485,7 @@ def extrair_frames(dicom_path) -> list[tuple[np.ndarray, int]]:
             output.append((frame, idx + 1))
 
     else:
-        frame = _prepare_frame(img_array)
+        frame = _prepare_frame_array(img_array)
         output.append((frame, 1))
     
     if not output:

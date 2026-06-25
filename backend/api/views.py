@@ -1,8 +1,4 @@
-<<<<<<< Updated upstream
 from django.http import HttpRequest, HttpResponse
-=======
-from django.http import FileResponse, HttpRequest
->>>>>>> Stashed changes
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.text import slugify
@@ -64,6 +60,7 @@ logger = logging.getLogger(__name__)
 
 ### VIEWS DOS MODELOS DA CALCIVISION ###
 
+@api_view(['GET'])
 def hello(request: HttpRequest):
     return Response({ "message": "Hello from Django!" })
 
@@ -97,7 +94,6 @@ def _build_vo_metadata(summary: dict | None, source: str) -> dict:
     }
 
 
-<<<<<<< Updated upstream
 def _get_owned_patient_and_echo(user, patient_id: int, echo_id: int):
     patient = get_object_or_404(Patient, id=patient_id, doctor=user)
     echocardiogram = get_object_or_404(Echocardiogram.objects.prefetch_related('frames__data'), id=echo_id, patient=patient)
@@ -212,85 +208,6 @@ def _build_legacy_transient_report(
         validated_at=validated_at,
         pdf_generated_at=pdf_generated_at,
     )
-=======
-REPORT_REQUIRED_SECTIONS = (
-    'identification',
-    'automatic_summary',
-    'findings',
-    'measurements',
-    'validation',
-    'conclusion',
-)
-
-
-def _parse_report_data(raw_value):
-    if raw_value in (None, '', b''):
-        return {}
-    if isinstance(raw_value, dict):
-        return raw_value
-    try:
-        return json.loads(raw_value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _parse_optional_bool(value):
-    if value in (None, '', 'null'):
-        return None
-    if isinstance(value, bool):
-        return value
-    normalized = str(value).strip().lower()
-    if normalized in {'true', '1', 'yes', 'sim'}:
-        return True
-    if normalized in {'false', '0', 'no', 'nao', 'não'}:
-        return False
-    return None
-
-
-def _report_is_complete(report_data: dict) -> bool:
-    if not isinstance(report_data, dict):
-        return False
-    if not all(report_data.get(section) not in (None, '', []) for section in REPORT_REQUIRED_SECTIONS):
-        return False
-
-    conclusion = report_data.get('conclusion') or {}
-    final_text = conclusion.get('final_text') if isinstance(conclusion, dict) else None
-    return bool(final_text and str(final_text).strip())
-
-
-def _build_report_title(patient: Patient, echocardiogram: Echocardiogram | None, report_data: dict) -> str:
-    report_title = report_data.get('title') if isinstance(report_data, dict) else None
-    if report_title:
-        return str(report_title).strip()
-
-    exam_label = echocardiogram.description.strip() if echocardiogram and echocardiogram.description else None
-    if exam_label:
-        return f"Relatório clínico - {exam_label}"
-    return f"Relatório clínico - {patient.name}"
-
-
-def _build_report_download_name(report: ReportPdf) -> str:
-    patient_slug = slugify(report.patient.name) or f"paciente-{report.patient_id}"
-    exam_label = (
-        report.echocardiogram.description
-        if report.echocardiogram and report.echocardiogram.description
-        else report.title
-    )
-    exam_slug = slugify(exam_label) or f"exame-{report.echocardiogram_id or report.id}"
-    exam_date = (
-        report.echocardiogram.uploaded_at.strftime('%Y%m%d')
-        if report.echocardiogram and report.echocardiogram.uploaded_at
-        else timezone.now().strftime('%Y%m%d')
-    )
-    return f"relatorio_clinico_{patient_slug}_{exam_slug}_{exam_date}.pdf"
-
-
-def _sync_patient_report_flag(patient: Patient):
-    has_report = ReportPdf.objects.filter(patient=patient).exists()
-    if patient.has_report != has_report:
-        patient.has_report = has_report
-        patient.save(update_fields=['has_report'])
->>>>>>> Stashed changes
 
 @api_view(['GET'])
 @authentication_classes([JWTAuthentication])
@@ -923,7 +840,6 @@ def create_report(request: HttpRequest, patient_id: int):
     except Patient.DoesNotExist:
         return Response({ 'error': 'Patient not found or unauthorized' }, status=status.HTTP_403_FORBIDDEN)
 
-<<<<<<< Updated upstream
     if 'pdf_file' not in request.FILES:
         return Response({ 'error': 'PDF file not provided' }, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1014,110 +930,6 @@ def list_reports(request: HttpRequest):
 
     serializer = ClinicalReportSummarySerializer(transient_reports, many=True, context={'request': request})
     return Response(serializer.data, status=status.HTTP_200_OK)
-=======
-    echo_id = request.data.get('echocardiogram_id') or request.data.get('exam_id')
-    echocardiogram = None
-
-    if echo_id not in (None, ''):
-        try:
-            echocardiogram = Echocardiogram.objects.get(id=echo_id, patient=patient)
-        except Echocardiogram.DoesNotExist:
-            return Response({ 'error': 'Echocardiogram not found for this patient' }, status=status.HTTP_404_NOT_FOUND)
-
-    report_data = _parse_report_data(request.data.get('report_data'))
-    if report_data is None:
-        return Response({ 'error': 'Invalid report_data payload' }, status=status.HTTP_400_BAD_REQUEST)
-
-    pdf_file = request.FILES.get('pdf_file')
-    if not report_data and not pdf_file:
-        return Response(
-            { 'error': 'Provide report_data or pdf_file to create/update a report' },
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    status_value = request.data.get('status') or (
-        ReportPdf.Status.READY if pdf_file else ReportPdf.Status.AUTO_GENERATED
-    )
-    if status_value not in ReportPdf.Status.values:
-        return Response({ 'error': 'Invalid report status' }, status=status.HTTP_400_BAD_REQUEST)
-
-    if status_value == ReportPdf.Status.READY and not _report_is_complete(report_data):
-        return Response(
-            { 'error': 'The report is incomplete and cannot be marked as ready for export' },
-            status=status.HTTP_409_CONFLICT,
-        )
-
-    if pdf_file:
-        if not pdf_file.name.lower().endswith('.pdf'):
-            return Response({ 'error': 'Uploaded file must have .pdf extension' }, status=status.HTTP_400_BAD_REQUEST)
-        header = pdf_file.read(4)
-        pdf_file.seek(0)
-        if header != b'%PDF':
-            return Response({ 'error': 'Uploaded file is not a valid PDF' }, status=status.HTTP_400_BAD_REQUEST)
-
-    report, created = ReportPdf.objects.get_or_create(
-        patient=patient,
-        doctor=request.user,
-        echocardiogram=echocardiogram,
-        defaults={
-            'title': _build_report_title(patient, echocardiogram, report_data),
-            'report_data': report_data,
-            'status': status_value,
-        },
-    )
-
-    if not report_data and report.report_data:
-        report_data = report.report_data
-
-    report.title = request.data.get('title') or _build_report_title(patient, echocardiogram, report_data)
-    report.status = status_value
-    report.report_data = report_data
-    report.last_error = request.data.get('last_error', '') if status_value == ReportPdf.Status.FAILED else ''
-
-    has_calcification = _parse_optional_bool(request.data.get('has_calcification'))
-    if has_calcification is not None:
-        report.has_calcification = has_calcification
-    elif echocardiogram and echocardiogram.vo is not None:
-        report.has_calcification = float(echocardiogram.vo) > 30
-
-    objective_variable = request.data.get('objective_variable')
-    if objective_variable not in (None, ''):
-        try:
-            report.objective_variable = float(objective_variable)
-        except (TypeError, ValueError):
-            return Response({ 'error': 'objective_variable must be numeric' }, status=status.HTTP_400_BAD_REQUEST)
-    elif echocardiogram and echocardiogram.vo is not None:
-        report.objective_variable = float(echocardiogram.vo if echocardiogram.vo > 1 else echocardiogram.vo * 100)
-
-    if status_value in {ReportPdf.Status.USER_REVIEWED, ReportPdf.Status.READY}:
-        report.validated_at = timezone.now()
-
-    clear_pdf = _parse_optional_bool(request.data.get('clear_pdf')) is True
-    if clear_pdf and report.pdf_file and not pdf_file:
-        report.pdf_file.delete(save=False)
-        report.pdf_file = None
-        report.pdf_generated_at = None
-
-    if pdf_file:
-        if report.pdf_file and report.pdf_file.name and report.pdf_file.name != pdf_file.name:
-            report.pdf_file.delete(save=False)
-        report.pdf_file = pdf_file
-        report.pdf_generated_at = timezone.now()
-
-    report.save()
-    _sync_patient_report_flag(patient)
-
-    serializer = ReportPdfSerializer(report, context={'request': request})
-    return Response(
-        {
-            'success': 'Report saved successfully',
-            'report_id': report.id,
-            'created': created,
-            'report': serializer.data,
-        },
-        status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
-    )
->>>>>>> Stashed changes
 
 
 @api_view(['GET'])
@@ -1132,7 +944,6 @@ def get_report(request: HttpRequest, patient_id: int):
     except Patient.DoesNotExist:
         return Response({ 'error': 'Patient not found or unauthorized' }, status=status.HTTP_403_FORBIDDEN)
 
-<<<<<<< Updated upstream
     if is_clinical_report_schema_ready():
         reports = ClinicalReport.objects.filter(patient=patient).select_related('patient', 'doctor', 'echocardiogram')
 
@@ -1520,44 +1331,6 @@ def export_report_pdf(request: HttpRequest, report_id: int):
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
     response['Content-Length'] = str(len(pdf_bytes))
     return response
-=======
-    reports = ReportPdf.objects.filter(patient=patient, doctor=request.user).select_related('echocardiogram', 'doctor')
-    echo_id = request.GET.get('echo_id')
-    if echo_id:
-        try:
-            report = reports.get(echocardiogram_id=echo_id)
-        except ReportPdf.DoesNotExist:
-            return Response({ 'error': 'Report not found for this exam' }, status=status.HTTP_404_NOT_FOUND)
-        serializer = ReportPdfSerializer(report, context={'request': request})
-        return Response(serializer.data)
-
-    serializer = ReportPdfSerializer(reports.order_by('-updated_at'), many=True, context={'request': request})
-    return Response(serializer.data)
-
-
-@api_view(['GET'])
-@authentication_classes([JWTAuthentication])
-@permission_classes([IsAuthenticated])
-def download_report(request: HttpRequest, report_id: int):
-    try:
-        report = ReportPdf.objects.select_related('patient', 'echocardiogram').get(pk=report_id, doctor=request.user)
-    except ReportPdf.DoesNotExist:
-        return Response({ 'error': 'Report not found' }, status=status.HTTP_404_NOT_FOUND)
-
-    if not report.pdf_file:
-        return Response(
-            { 'error': 'This report does not have a PDF available yet' },
-            status=status.HTTP_409_CONFLICT,
-        )
-
-    report.pdf_file.open('rb')
-    return FileResponse(
-        report.pdf_file,
-        as_attachment=True,
-        filename=_build_report_download_name(report),
-        content_type='application/pdf',
-    )
->>>>>>> Stashed changes
 
 
 @api_view(['DELETE'])
@@ -1587,21 +1360,13 @@ def delete_report(request: HttpRequest, report_id: int):
         return Response({ 'message': 'Report deleted successfully' }, status=status.HTTP_204_NO_CONTENT)
 
     try:
-<<<<<<< Updated upstream
         report = ClinicalReport.objects.get(pk=report_id, doctor=request.user)
-=======
-        report = ReportPdf.objects.get(pk=report_id, doctor=request.user)
->>>>>>> Stashed changes
         patient = report.patient
         
         # Apaga o report da base de dados e dispara automaticamente o signal que removerá o ficheiro físico do sistema
         report.delete()
-<<<<<<< Updated upstream
         patient.has_report = _has_any_reports_for_patient(patient_id=patient.id, doctor_id=request.user.id)
         patient.save(update_fields=['has_report'])
-=======
-        _sync_patient_report_flag(patient)
->>>>>>> Stashed changes
         
         return Response({ 'message': 'Report deleted successfully' }, status=status.HTTP_204_NO_CONTENT)
     except ClinicalReport.DoesNotExist:
@@ -1626,6 +1391,13 @@ def add_echocardiogram(request: HttpRequest, patient_id: int):
     processed = 0
     failed = []
     created_echos = []
+
+    def _file_context(uploaded_file):
+        return {
+            'filename': uploaded_file.name,
+            'size': getattr(uploaded_file, 'size', None),
+            'content_type': getattr(uploaded_file, 'content_type', '') or '',
+        }
     
     # Processa cada um dos DICOMs recebidos
     for dicom in dicom_files:
@@ -1635,12 +1407,23 @@ def add_echocardiogram(request: HttpRequest, patient_id: int):
                 created_echos.append(echo)
             processed += 1
         except Exception as e:
-            failed.append({ 'filename': dicom.name, 'error': str(e) })
+            file_error = { **_file_context(dicom), 'error': str(e) }
+            failed.append(file_error)
+            logger.warning(
+                "Falha ao processar DICOM enviado",
+                extra={
+                    "patient_id": patient_id,
+                    "upload_filename": file_error["filename"],
+                    "upload_size": file_error["size"],
+                    "upload_content_type": file_error["content_type"],
+                    "upload_error": file_error["error"],
+                },
+            )
     
     if processed == 0:
         first_error = failed[0].get('error') if failed else None
         return Response({
-            'error': f'Não foi possível processar os DICOMs enviados.{f" {first_error}" if first_error else ""}',
+            'error': f'Não foi possível processar os ficheiros enviados.{f" {first_error}" if first_error else ""}',
             'errors': failed,
         }, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1660,7 +1443,7 @@ def add_echocardiogram(request: HttpRequest, patient_id: int):
         
     created_ids = [echo.id for echo in created_echos]
     return Response({
-        'message': f'{processed} DICOMs processed successfully',
+        'message': f'{processed} ficheiro(s) processado(s) com sucesso',
         'errors': failed,
         'echo_ids': created_ids,
         'echo_id': created_ids[-1] if created_ids else None,

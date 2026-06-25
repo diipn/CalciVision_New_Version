@@ -149,6 +149,7 @@ function PatientRow({ patient, defaultState, reloadTable }) {
                   <InProgressAnalysesTable
                     patient={patient}
                     echocardiograms={pendingEchocardiograms}
+                    reloadTable={reloadTable}
                   />
                 </div>
               )}
@@ -342,11 +343,32 @@ function EchocardiogramsTable({ patient, echocardiograms, reloadTable }) {
   );
 }
 
-function InProgressAnalysesTable({ patient, echocardiograms }) {
+function InProgressAnalysesTable({ patient, echocardiograms, reloadTable }) {
   const navigate = useNavigate();
+  const [discardingExamId, setDiscardingExamId] = useState(null);
 
   const statusLabel = (status) =>
     status === 'IN_PROGRESS' ? 'Em curso' : 'Por iniciar';
+
+  const handleDiscardAnalysis = async (echo) => {
+    setDiscardingExamId(echo.id);
+    try {
+      await deleteEchocardiogram(patient.id, echo.id);
+      localStorage.removeItem(`exam-settings-${echo.id}`);
+      localStorage.removeItem(`exam-progress-${echo.id}`);
+      localStorage.removeItem(`clinical-report-draft-${patient.id}-${echo.id}`);
+      await reloadTable();
+    } catch (error) {
+      console.error('Erro ao descartar análise', error);
+      alert(
+        error?.response?.data?.error ||
+          error?.response?.data?.message ||
+          'Não foi possível descartar a análise.'
+      );
+    } finally {
+      setDiscardingExamId(null);
+    }
+  };
 
   return (
     <table className='table-fixed w-full border-collapse'>
@@ -370,14 +392,34 @@ function InProgressAnalysesTable({ patient, echocardiograms }) {
                 {statusLabel(echo.status)}
               </span>
             </td>
-            <td className='px-4 py-2 text-right'>
-              <button
-                type='button'
-                className='rounded-md bg-green-dark px-3 py-2 text-sm font-semibold text-white'
-                onClick={() => navigate(`/analyse_aortic_valve/${patient.id}/${echo.id}`)}
-              >
-                Continuar análise
-              </button>
+            <td className='px-4 py-2'>
+              <div className='flex items-center justify-end gap-2'>
+                <button
+                  type='button'
+                  className='rounded-md bg-green-dark px-3 py-2 text-sm font-semibold text-white'
+                  onClick={() => navigate(`/analyse_aortic_valve/${patient.id}/${echo.id}`)}
+                >
+                  Continuar análise
+                </button>
+                <AlertDialogMenu
+                  heading='Descartar análise'
+                  content={`Tem a certeza de que pretende descartar a análise "${echo.description}"? O exame, os frames e todas as alterações guardadas serão eliminados. Esta ação não pode ser anulada.`}
+                  confirmText='Descartar'
+                  onConfirm={() => handleDiscardAnalysis(echo)}
+                >
+                  <button
+                    type='button'
+                    className='rounded-md bg-red p-2 text-white disabled:cursor-not-allowed disabled:opacity-50'
+                    disabled={discardingExamId === echo.id}
+                    title='Descartar análise'
+                    aria-label={`Descartar análise ${echo.description}`}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width={18} height={18} viewBox="0 0 24 24">
+                      <path fill="currentColor" fillRule="evenodd" d="M8.106 2.553A1 1 0 0 1 9 2h6a1 1 0 0 1 .894.553L17.618 6H20a1 1 0 1 1 0 2h-1v11a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V8H4a1 1 0 0 1 0-2h2.382zM14.382 4l1 2H8.618l1-2zM11 11a1 1 0 1 0-2 0v6a1 1 0 1 0 2 0zm4 0a1 1 0 1 0-2 0v6a1 1 0 1 0 2 0z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                </AlertDialogMenu>
+              </div>
             </td>
           </tr>
         ))}

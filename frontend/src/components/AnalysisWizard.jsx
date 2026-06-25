@@ -523,6 +523,7 @@ export default function AnalysisWizard({
     setUnsavedChanges(true);
     try {
       await persistReport(false);
+      setUnsavedChanges(false);
       navigate(`/patients/${patient.id}/reports/${echoId}`);
     } catch (error) {
       console.error("Erro ao gerar o relatório:", error);

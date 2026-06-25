@@ -199,6 +199,13 @@ export const submitExamAnalysis = async (patientId, echoId, payload) => {
   return response.data;
 };
 
+export const startExamAnalysis = async (patientId, echoId) => {
+  const response = await api.post(
+    `/api/patient/${patientId}/echocardiogram/${echoId}/start/`
+  );
+  return response.data;
+};
+
 const extractFilenameFromDisposition = (contentDisposition) => {
   if (!contentDisposition) return null;
   const utfMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);

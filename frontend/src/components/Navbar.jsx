@@ -73,7 +73,9 @@ function NavItem({ name, url, highlight = false, children }) {
   const handleClick = (e) => {
     e.preventDefault();
     if (hasUnsavedChanges) {
-      const confirmLeave = window.confirm("Tens alterações por salvar. Desejas mesmo sair?");
+      const confirmLeave = window.confirm(
+        "Existem alterações não guardadas. Se sair, poderá perdê-las. Deseja continuar?"
+      );
       if (!confirmLeave) return;
       setUnsavedChanges(false);
     }

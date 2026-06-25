@@ -88,6 +88,10 @@ export default function PatientList({ patients, defaultPatient, reloadTable }) {
 function PatientRow({ patient, defaultState, reloadTable }) {
   const [isOpen, setIsOpen] = useState(defaultState);
   const toggleState = () => setIsOpen(!isOpen);
+  const completedEchocardiograms =
+    patient.echocardiograms?.filter((echo) => echo.status === 'EVALUATED') || [];
+  const pendingEchocardiograms =
+    patient.echocardiograms?.filter((echo) => echo.status !== 'EVALUATED') || [];
 
   const handleDeletePatient = async (patientId) => {
     try {
@@ -111,7 +115,7 @@ function PatientRow({ patient, defaultState, reloadTable }) {
         <td className='px-4 py-3 text-left min-w-8 truncate'>{new Date(patient.updated_at).toLocaleString('pt-PT', { day: '2-digit', month: '2-digit', year: 'numeric' })}</td>
         <td className='px-4 py-3 text-left min-w-8 truncate'>{patient.address}</td>
         <td className='px-4 py-3 text-left min-w-8 truncate'>{patient.email}</td>
-        <td className='px-4 py-3 text-left min-w-8 truncate'>{patient.echocardiograms.length}</td>
+        <td className='px-4 py-3 text-left min-w-8 truncate'>{completedEchocardiograms.length}</td>
         <td>
           <AlertDialogMenu
             heading='Eliminar doente'
@@ -128,11 +132,25 @@ function PatientRow({ patient, defaultState, reloadTable }) {
         <td colSpan={7} className='p-0! text-left min-w-8'>
           <div className={`patient-row-menu transition-[height] ease-out duration-500 overflow-hidden ${isOpen ? 'h-auto' : 'h-0'}`}>
             <div className="px-15! py-4! border-b-2 border-b-gray-medium">
-              <h6 className='mb-3'>Ecocardiogramas</h6>
-              {patient.echocardiograms?.length > 0 ? (
-                <EchocardiogramsTable patient={patient} reloadTable={reloadTable} />
+              <h6 className='mb-3'>Ecocardiogramas concluídos</h6>
+              {completedEchocardiograms.length > 0 ? (
+                <EchocardiogramsTable
+                  patient={patient}
+                  echocardiograms={completedEchocardiograms}
+                  reloadTable={reloadTable}
+                />
               ) : (
-                <em>Sem ecocardiogramas.</em>
+                <em>Sem ecocardiogramas concluídos.</em>
+              )}
+
+              {pendingEchocardiograms.length > 0 && (
+                <div className='mt-6 border-t border-green-pale pt-4'>
+                  <h6 className='mb-3'>Análises pendentes ou em curso</h6>
+                  <InProgressAnalysesTable
+                    patient={patient}
+                    echocardiograms={pendingEchocardiograms}
+                  />
+                </div>
               )}
             </div>
           </div>
@@ -142,7 +160,7 @@ function PatientRow({ patient, defaultState, reloadTable }) {
   );
 }
 
-function EchocardiogramsTable({ patient, reloadTable }) {
+function EchocardiogramsTable({ patient, echocardiograms, reloadTable }) {
   const navigate = useNavigate();
   const [selectedExams, setSelectedExams] = useState([]);
   const [selectionError, setSelectionError] = useState('');
@@ -255,7 +273,7 @@ function EchocardiogramsTable({ patient, reloadTable }) {
           </tr>
         </thead>
         <tbody>
-          {patient.echocardiograms?.map((echo) => {
+          {echocardiograms.map((echo) => {
             const risk = getRiskBadge(echo.vo);
             const report = reportsByExam[echo.id];
             return (
@@ -321,5 +339,49 @@ function EchocardiogramsTable({ patient, reloadTable }) {
         </tbody>
       </table>
     </div>
+  );
+}
+
+function InProgressAnalysesTable({ patient, echocardiograms }) {
+  const navigate = useNavigate();
+
+  const statusLabel = (status) =>
+    status === 'IN_PROGRESS' ? 'Em curso' : 'Por iniciar';
+
+  return (
+    <table className='table-fixed w-full border-collapse'>
+      <thead>
+        <tr>
+          <th className='w-2/5 px-4 py-1 text-left border-b-2'>Exame</th>
+          <th className='w-1/5 px-4 py-1 text-left border-b-2'>Data</th>
+          <th className='w-1/5 px-4 py-1 text-left border-b-2'>Estado</th>
+          <th className='w-1/5 px-4 py-1 border-b-2' />
+        </tr>
+      </thead>
+      <tbody>
+        {echocardiograms.map((echo) => (
+          <tr key={echo.id}>
+            <td className='px-4 py-2 font-semibold'>{echo.description}</td>
+            <td className='px-4 py-2'>
+              <em>{formatExamDate(echo.date || echo.uploaded_at)}</em>
+            </td>
+            <td className='px-4 py-2'>
+              <span className='inline-flex rounded-full bg-orange-50 px-2 py-1 text-xs font-semibold text-orange-800'>
+                {statusLabel(echo.status)}
+              </span>
+            </td>
+            <td className='px-4 py-2 text-right'>
+              <button
+                type='button'
+                className='rounded-md bg-green-dark px-3 py-2 text-sm font-semibold text-white'
+                onClick={() => navigate(`/analyse_aortic_valve/${patient.id}/${echo.id}`)}
+              >
+                Continuar análise
+              </button>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }

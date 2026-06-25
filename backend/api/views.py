@@ -1475,6 +1475,28 @@ def get_frames_for_echocardiogram(request: HttpRequest, patient_id: int, echo_id
 @api_view(['POST'])
 @authentication_classes([JWTAuthentication])
 @permission_classes([IsAuthenticated])
+def start_echocardiogram_analysis(request: HttpRequest, patient_id: int, echo_id: int):
+    patient = get_object_or_404(Patient, id=patient_id, doctor=request.user)
+    echocardiogram = get_object_or_404(Echocardiogram, id=echo_id, patient=patient)
+
+    if echocardiogram.status == Echocardiogram.Status.REVIEW_NEEDED:
+        echocardiogram.status = Echocardiogram.Status.IN_PROGRESS
+        echocardiogram.save(update_fields=['status'])
+
+    if patient.status != Patient.Status.UNDER_REVIEW and echocardiogram.status != Echocardiogram.Status.EVALUATED:
+        patient.status = Patient.Status.UNDER_REVIEW
+        patient.updated_at = timezone.now()
+        patient.save(update_fields=['status', 'updated_at'])
+
+    return Response({
+        'echo_id': echocardiogram.id,
+        'status': echocardiogram.status,
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
 def quantify_echocardiogram_objective_variable(request: HttpRequest, patient_id: int, echo_id: int):
     """
     Calcula a VO com base nos frames e nas bboxes atualmente anotadas, sem persistir o resultado.

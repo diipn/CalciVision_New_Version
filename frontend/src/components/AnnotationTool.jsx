@@ -243,16 +243,29 @@ const AnnotationTool = forwardRef(function AnnotationTool({ frames, currentFrame
     // Função para começar a deteção da válvula através do hook personalizado
     const handleDetectValve = async () => {
         try {
+            if (!frame) {
+                console.warn('Não existe um frame selecionado para analisar.');
+                return null;
+            }
+
             const valveData = await startSingleDetection(frame);
-            
-            const bbox = valveData.bbox;
-            if(bbox.length != 4) throw new Error('Unexpected number of coordinates received.');
+            const bbox = valveData?.bbox;
+            const hasValidCoordinates =
+                Array.isArray(bbox) &&
+                bbox.length === 4 &&
+                bbox.every(coordinate => Number.isFinite(Number(coordinate)));
+
+            if (!hasValidCoordinates) {
+                console.warn('A válvula não foi detetada no frame selecionado.', valveData);
+                return null;
+            }
+
             const [x1, y1, x2, y2] = bbox;
             const valveBox = {
-                x: Math.min(x1, x2),
-                y: Math.min(y1, y2),
-                width: Math.abs(x1 - x2),
-                height: Math.abs(y1 - y2),
+                x: Math.min(Number(x1), Number(x2)),
+                y: Math.min(Number(y1), Number(y2)),
+                width: Math.abs(Number(x1) - Number(x2)),
+                height: Math.abs(Number(y1) - Number(y2)),
                 id: 'prediction',
                 is_annotation_generated: true,
             }

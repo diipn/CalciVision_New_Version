@@ -4,9 +4,10 @@ import MainLayout from '../layouts/MainLayout';
 import AnnotationTool from '../components/AnnotationTool';
 import AnalysisWizard from '../components/AnalysisWizard';
 import FrameNavigator from '../components/FrameNavigator';
-import api, { getExamSettings, updateExamSettings } from '../api';
+import api, { getExamSettings, startExamAnalysis, updateExamSettings } from '../api';
 import { useUnsavedStore } from '../store/useUnsavedStore';
 import { defaultImageSettings } from '../constants';
+import useNavigationWarning from '../hooks/useNavigationWarning';
 
 const createEmptyExamState = (exam = null) => ({
   exam,
@@ -35,7 +36,7 @@ export default function ManualAnnotation() {
   const { patientId, echoId } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { setUnsavedChanges } = useUnsavedStore();
+  const { hasUnsavedChanges, setUnsavedChanges } = useUnsavedStore();
 
   const activeExamId = String(echoId);
 
@@ -68,6 +69,20 @@ export default function ManualAnnotation() {
       : null;
 
   const [selectedExamId, setSelectedExamId] = useState(initialSelectedExamId);
+  const startedExamIds = useRef(new Set());
+
+  useNavigationWarning({
+    enabled: hasUnsavedChanges,
+    message:
+      'A análise ainda não foi concluída. Se sair, poderá perder alterações não guardadas. Deseja continuar?',
+    shouldBlockNavigation: ({ nextLocation }) =>
+      !nextLocation.pathname.startsWith(`/analyse_aortic_valve/${patientId}/`),
+  });
+
+  useEffect(() => {
+    setUnsavedChanges(false);
+    return () => setUnsavedChanges(false);
+  }, [setUnsavedChanges]);
 
   useEffect(() => {
     setSelectedExamId(initialSelectedExamId);
@@ -251,6 +266,24 @@ export default function ManualAnnotation() {
               : Boolean(currentCalc.binary_classification),
           imageSettings: savedSettings?.imageSettings || defaultImageSettings,
         });
+
+        if (!startedExamIds.current.has(examId) && examMeta?.status !== 'EVALUATED') {
+          startedExamIds.current.add(examId);
+          try {
+            const startedExam = await startExamAnalysis(patientId, examId);
+            if (!isActive) return;
+            mergeExamState(examId, {
+              exam: {
+                ...examMeta,
+                status: startedExam.status,
+              },
+            });
+            setUnsavedChanges(true);
+          } catch (startError) {
+            startedExamIds.current.delete(examId);
+            console.error('Não foi possível marcar a análise como iniciada:', startError);
+          }
+        }
       } catch (error) {
         if (!isActive) return;
         if (error.response && (error.response.status === 403 || error.response.status === 404)) {
@@ -305,7 +338,7 @@ export default function ManualAnnotation() {
       isActive = false;
       retryTimeouts.forEach((timeoutId) => clearTimeout(timeoutId));
     };
-  }, [patientId, analysisSequence, navigate]);
+  }, [patientId, analysisSequence, navigate, setUnsavedChanges]);
 
   const activeExamState = examStates[activeExamId] || createEmptyExamState();
   const activeExam =

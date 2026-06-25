@@ -480,7 +480,7 @@ export default function PainelTemporal() {
                               <div>
                                 <p className="leading-5 font-semibold text-gray-dark">{row.name}</p>
                                 <p className="text-sm text-gray-medium">
-                                  {row.id} · {row.sex} · {row.birth_year || "—"}
+                                  {row.sex} · {row.birth_year || "—"}
                                 </p>
                               </div>
                             </div>

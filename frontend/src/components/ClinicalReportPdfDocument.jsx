@@ -1,4 +1,5 @@
 import { Document, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
+import { getClinicalReportPresentation } from "../utils/clinicalReportPresentation";
 
 const styles = StyleSheet.create({
   page: {
@@ -185,27 +186,27 @@ const styles = StyleSheet.create({
     backgroundColor: "#fafcfb",
   },
   cellMetric: {
-    width: "30%",
+    width: "27%",
     paddingVertical: 8,
     paddingHorizontal: 8,
   },
   cellValue: {
-    width: "14%",
+    width: "13%",
     paddingVertical: 8,
     paddingHorizontal: 8,
   },
   cellUnit: {
-    width: "12%",
+    width: "15%",
     paddingVertical: 8,
     paddingHorizontal: 8,
   },
   cellInterpretation: {
-    width: "44%",
+    width: "45%",
     paddingVertical: 8,
     paddingHorizontal: 8,
   },
   tableHeadText: {
-    fontSize: 8,
+    fontSize: 7.5,
     fontWeight: 700,
     textTransform: "uppercase",
     color: "#2f7d5d",
@@ -396,20 +397,20 @@ function Section({ eyebrow, title, children, alt = false, titleMinPresenceAhead 
 }
 
 export default function ClinicalReportPdfDocument({ report }) {
-  const reportContent = report?.content || {};
-  const identification = reportContent.identification || {};
-  const summary = reportContent.summary || {};
-  const findings = reportContent.findings || {};
-  const metrics = reportContent.metrics || {};
-  const validation = reportContent.validation || {};
-  const conclusion = reportContent.conclusion || {};
+  const presentation = getClinicalReportPresentation(report);
+  const identification = presentation.identification;
+  const summary = presentation.summary;
+  const findings = presentation.findings;
+  const metrics = presentation.metrics;
+  const validation = presentation.validation;
+  const conclusion = presentation.conclusion;
 
   const identificationItems = identification.items || [];
   const summaryCards = [
     { label: "Resultado da IA", value: summary.ai_result || "—" },
     { label: "Calcificação", value: summary.calcification_presence || "—" },
     { label: "Classificação", value: summary.classification || "—" },
-    ...(summary.highlights || []),
+    { label: "Risco estimado", value: summary.risk || "—" },
   ];
 
   const doctorName =
@@ -455,11 +456,14 @@ export default function ClinicalReportPdfDocument({ report }) {
         <Section eyebrow="Secção 2" title={summary.title || "Resultado da análise"} alt>
           <InfoGrid items={summaryCards} columns="quarter" />
           <View style={styles.contextNote}>
-            <Text>{summary.context_note || "O resultado automático deve ser interpretado no contexto clínico global."}</Text>
+            <Text>
+              {summary.context_note ||
+                "Resultado automático assistido por inteligência artificial, sujeito a interpretação clínica e validação do profissional responsável."}
+            </Text>
           </View>
         </Section>
 
-        <Section eyebrow="Secção 3" title={findings.title || "Achados e observações da válvula"}>
+        <Section eyebrow="Secção 3" title="Avaliação da válvula aórtica">
           <FindingsBlock items={findings.items || []} />
         </Section>
 
@@ -469,7 +473,7 @@ export default function ClinicalReportPdfDocument({ report }) {
 
         <Section
           eyebrow="Secção 5"
-          title={validation.title || "Observações clínicas e validação"}
+          title="Validação clínica"
         >
           <TextPanel
             title="Estado de validação"
@@ -477,24 +481,16 @@ export default function ClinicalReportPdfDocument({ report }) {
             alt
           />
           <TextPanel
-            title="Síntese validada pelo utilizador"
-            value={report?.validated_summary || "—"}
-          />
-          <TextPanel
-            title="Observações clínicas"
-            value={report?.clinical_notes || "—"}
+            title="Observações do profissional"
+            value={validation.professional_notes}
           />
         </Section>
 
         <Section eyebrow="Secção 6" title={conclusion.title || "Conclusão clínica"} alt>
           <TextPanel
             title="Conclusão clínica final"
-            value={report?.clinical_conclusion || "—"}
+            value={conclusion.final_text}
             alt
-          />
-          <TextPanel
-            title="Base automática para enquadramento"
-            value={conclusion.suggested_text || "—"}
           />
         </Section>
 

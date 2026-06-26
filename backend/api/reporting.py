@@ -309,26 +309,46 @@ def _summarise_risk(vo_percentage: float | None) -> str:
     return "Baixo"
 
 
-def _build_auto_conclusion(calcification_present: bool | None, severity: str, vo_percentage: float | None, calcified_frames: int, annotated_frames: int) -> str:
+def _build_auto_conclusion(
+    calcification_present: bool | None,
+    severity: str,
+    risk: str,
+    vo_percentage: float | None,
+) -> str:
     if calcification_present is None:
         return (
-            "Os dados atuais não permitem formular uma conclusão clínica robusta. "
-            "Reveja a ROI, confirme a classificação final e valide manualmente o relatório."
+            "A análise assistida por inteligência artificial não permite uma caracterização conclusiva "
+            "com os dados atualmente disponíveis. Este resultado deve ser interpretado em conjunto com "
+            "a avaliação clínica, os restantes parâmetros ecocardiográficos e a validação do profissional responsável."
         )
 
     if calcification_present:
         return (
-            "A análise selecionada sugere presença de calcificação valvular aórtica, "
-            f"com gravidade {severity.lower()} e índice de calcificação de {_format_percentage(vo_percentage)}. "
-            f"Foram identificados sinais compatíveis em {calcified_frames}/{annotated_frames or 0} frames com ROI válida. "
-            "Correlacionar com a restante avaliação ecocardiográfica e contexto clínico."
+            "A análise assistida por inteligência artificial sugere presença de calcificação valvular aórtica "
+            f"no conjunto de imagens analisado, com índice de calcificação calculado de {_format_percentage(vo_percentage)}. "
+            f"A classificação estimada é {severity.lower()} e o risco estimado é {risk.lower()}. "
+            "Este resultado deve ser interpretado em conjunto com a avaliação clínica, os restantes parâmetros "
+            "ecocardiográficos e a validação do profissional responsável."
         )
 
     return (
-        "A análise selecionada não identificou sinais relevantes de calcificação valvular aórtica no conjunto revisto, "
-        f"com índice de calcificação de {_format_percentage(vo_percentage)}. "
-        "A decisão final deve ser integrada com a avaliação clínica e restante exame."
+        "A análise assistida por inteligência artificial não identificou sinais relevantes de calcificação valvular "
+        f"aórtica no conjunto de imagens analisado. O índice de calcificação calculado foi de {_format_percentage(vo_percentage)}, "
+        f"enquadrado como {risk.lower()} risco. Este resultado deve ser interpretado em conjunto com a avaliação clínica, "
+        "os restantes parâmetros ecocardiográficos e a validação do profissional responsável."
     )
+
+
+def _clean_clinical_notes(value: str | None) -> str:
+    normalized = (value or "").strip()
+    simplified = "".join(character for character in normalized.lower() if character.isalnum())
+    if (
+        not normalized
+        or all(character == "." or character.isspace() for character in normalized)
+        or simplified in {"ola", "olá", "teste", "test"}
+    ):
+        return "Sem observações adicionais."
+    return normalized
 
 
 def build_clinical_report_payload(
@@ -391,15 +411,37 @@ def build_clinical_report_payload(
         calcification_present = None
         classification_source = "unavailable"
 
+    low_nonzero = (
+        calcification_present is False
+        and vo_percentage is not None
+        and 0 < vo_percentage < CALCIFICATION_THRESHOLD
+    )
+    no_evidence = (
+        calcification_present is False
+        and (vo_percentage is None or vo_percentage == 0)
+        and calcified_frames == 0
+    )
     classification_label = (
         "Calcificação presente"
         if calcification_present is True
+        else "Sem calcificação significativa"
+        if low_nonzero
+        else "Ausente"
+        if no_evidence
         else "Sem calcificação relevante"
         if calcification_present is False
         else "Classificação pendente"
     )
     calcification_presence = (
-        "Presente" if calcification_present is True else "Ausente" if calcification_present is False else "Indeterminada"
+        "Presente"
+        if calcification_present is True
+        else "Não significativa"
+        if low_nonzero
+        else "Ausente"
+        if no_evidence
+        else "Sem calcificação relevante"
+        if calcification_present is False
+        else "Indeterminada"
     )
     severity = _summarise_severity(vo_percentage)
     risk = _summarise_risk(vo_percentage)
@@ -409,9 +451,8 @@ def build_clinical_report_payload(
     auto_conclusion = _build_auto_conclusion(
         calcification_present,
         severity,
+        risk,
         vo_percentage,
-        calcified_frames,
-        annotated_frames,
     )
 
     content = {
@@ -426,13 +467,13 @@ def build_clinical_report_payload(
             ],
         },
         "summary": {
-            "title": "Resumo automático da análise",
+            "title": "Resultado da análise",
             "ai_result": classification_label,
             "calcification_presence": calcification_presence,
             "classification": severity,
             "context_note": (
-                "Resultado gerado automaticamente a partir da análise selecionada. "
-                "Requer validação clínica antes de partilha ou arquivo."
+                "Resultado automático assistido por inteligência artificial, sujeito a interpretação clínica "
+                "e validação do profissional responsável."
             ),
             "highlights": [
                 {"label": "Frames totais", "value": str(total_frames)},
@@ -443,14 +484,16 @@ def build_clinical_report_payload(
             ],
         },
         "findings": {
-            "title": "Achados / observações da válvula",
+            "title": "Avaliação da válvula aórtica",
             "items": [
                 {
-                    "label": "Estado da válvula",
+                    "label": "Avaliação da válvula",
                     "value": (
-                        "Achados compatíveis com alteração valvular calcificada."
+                        "A análise indica sinais compatíveis com calcificação valvular aórtica "
+                        "no conjunto de imagens analisado."
                         if calcification_present is True
-                        else "Sem sinais relevantes de alteração calcificada na avaliação analisada."
+                        else "Não foram identificados sinais relevantes de calcificação valvular aórtica "
+                        "no conjunto de imagens analisado."
                         if calcification_present is False
                         else "Avaliação insuficiente para caracterização definitiva da válvula."
                     ),
@@ -458,22 +501,24 @@ def build_clinical_report_payload(
                 {
                     "label": "Presença de calcificação",
                     "value": (
-                        f"{calcification_presence} em {calcified_frames} de {annotated_frames or 0} frames com ROI válida."
-                        if annotated_frames
+                        f"Calcificação identificada em {calcified_frames} de {annotated_frames or 0} frames com ROI válida."
+                        if calcification_present is True and annotated_frames
+                        else "Sem calcificação relevante nos frames com ROI válida."
+                        if calcification_present is False and annotated_frames
                         else "Sem ROI válida suficiente para quantificação."
                     ),
                 },
                 {
-                    "label": "Observações relevantes",
+                    "label": "Enquadramento clínico",
                     "value": (
-                        "Interpretar em conjunto com a revisão médica, restantes achados ecocardiográficos "
-                        "e qualidade da janela acústica."
+                        "Resultado a interpretar em conjunto com a avaliação clínica, os restantes parâmetros "
+                        "ecocardiográficos e a qualidade da janela acústica."
                     ),
                 },
             ],
         },
         "metrics": {
-            "title": "Medições / métricas",
+            "title": "Métricas",
             "rows": [
                 {
                     "label": "Índice de calcificação (VO)",
@@ -501,7 +546,7 @@ def build_clinical_report_payload(
                     "label": "Frames com calcificação",
                     "value": str(calcified_frames),
                     "unit": "frames",
-                    "interpretation": "Frames classificados com achados compatíveis com calcificação.",
+                    "interpretation": "Frames classificados como compatíveis com calcificação.",
                 },
                 {
                     "label": "Percentagem de frames calcificados",
@@ -530,12 +575,8 @@ def build_clinical_report_payload(
             ],
         },
         "validation": {
-            "title": "Validação e edição pelo utilizador",
+            "title": "Validação clínica",
             "status": "Validado" if clinical_conclusion.strip() else "Pendente de validação",
-            "generated_note": (
-                "As secções acima foram geradas automaticamente. "
-                "Os campos abaixo refletem validação, complemento ou correção manual."
-            ),
         },
         "conclusion": {
             "title": "Conclusão clínica",
@@ -593,9 +634,6 @@ def validate_clinical_report_data(report) -> list[str]:
     ):
         if not content.get(section_key):
             issues.append(f"Falta a secção de {section_label}.")
-
-    if not report.validated_summary.strip():
-        issues.append("A síntese validada pelo utilizador ainda não foi preenchida.")
 
     if not report.clinical_conclusion.strip():
         issues.append("A conclusão clínica final ainda não foi preenchida.")
@@ -950,6 +988,142 @@ def _draw_card(draw: ImageDraw.ImageDraw, box: list[int], fill: str, outline: st
         )
 
 
+def _build_report_presentation(report, content: dict):
+    source = report.source_snapshot or {}
+    summary = dict(content.get("summary", {}))
+    highlights = [dict(item) for item in summary.get("highlights", []) if isinstance(item, dict)]
+    vo_percentage = source.get("objective_variable_percentage")
+    calcification_present = source.get("calcification_present")
+    annotated_frames = int(source.get("annotated_frames") or 0)
+    calcified_frames = int(source.get("calcified_frames") or 0)
+
+    if vo_percentage is None:
+        index_value = next(
+            (item.get("value") for item in highlights if item.get("label") == "Índice de calcificação"),
+            None,
+        )
+        try:
+            vo_percentage = float(str(index_value).replace("%", "").replace(",", "."))
+        except (TypeError, ValueError):
+            vo_percentage = None
+
+    if not isinstance(calcification_present, bool):
+        calcification_present = "presente" in str(summary.get("ai_result", "")).lower()
+
+    nonzero_without_relevant_calcification = (
+        calcification_present is False and vo_percentage is not None and vo_percentage > 0
+    )
+    low_nonzero = (
+        nonzero_without_relevant_calcification and vo_percentage < CALCIFICATION_THRESHOLD
+    )
+    severity = "Baixa" if low_nonzero else summary.get("classification") or _summarise_severity(vo_percentage)
+    risk = "Baixo" if calcification_present is False else next(
+        (item.get("value") for item in highlights if item.get("label") == "Risco estimado"),
+        _summarise_risk(vo_percentage),
+    )
+
+    summary.update(
+        {
+            "title": "Resultado da análise",
+            "ai_result": (
+                "Calcificação presente"
+                if calcification_present
+                else "Sem calcificação significativa"
+                if nonzero_without_relevant_calcification
+                else "Ausente"
+            ),
+            "calcification_presence": (
+                "Presente"
+                if calcification_present
+                else "Não significativa"
+                if nonzero_without_relevant_calcification
+                else "Ausente"
+            ),
+            "classification": severity,
+            "risk": risk,
+            "context_note": (
+                "Resultado automático assistido por inteligência artificial, sujeito a interpretação clínica "
+                "e validação do profissional responsável."
+            ),
+        }
+    )
+
+    findings = {
+        "title": "Avaliação da válvula aórtica",
+        "items": [
+            {
+                "label": "Avaliação da válvula",
+                "value": (
+                    "A análise indica sinais compatíveis com calcificação valvular aórtica "
+                    "no conjunto de imagens analisado."
+                    if calcification_present
+                    else "Não foram identificados sinais relevantes de calcificação valvular aórtica "
+                    "no conjunto de imagens analisado."
+                ),
+            },
+            {
+                "label": "Presença de calcificação",
+                "value": (
+                    f"Calcificação identificada em {calcified_frames} de {annotated_frames} frames com ROI válida."
+                    if calcification_present
+                    else "Sem calcificação relevante nos frames com ROI válida."
+                ),
+            },
+            {
+                "label": "Enquadramento clínico",
+                "value": (
+                    "Resultado a interpretar em conjunto com a avaliação clínica, os restantes parâmetros "
+                    "ecocardiográficos e a qualidade da janela acústica."
+                ),
+            },
+        ],
+    }
+
+    metrics = dict(content.get("metrics", {}))
+    metrics["title"] = "Métricas"
+    metrics["rows"] = [
+        {
+            **row,
+            "interpretation": (
+                "Frames classificados como compatíveis com calcificação."
+                if row.get("interpretation") == "Frames classificados com achados compatíveis com calcificação."
+                else row.get("interpretation")
+            ),
+        }
+        for row in metrics.get("rows", [])
+    ]
+
+    generated_conclusion = _build_auto_conclusion(
+        calcification_present,
+        severity,
+        risk,
+        vo_percentage,
+    )
+    raw_conclusion = (report.clinical_conclusion or "").strip()
+    suggested_conclusion = str(content.get("conclusion", {}).get("suggested_text", "")).strip()
+    automatic_prefixes = (
+        "A análise selecionada sugere",
+        "A análise selecionada não identificou",
+        "Os dados atuais não permitem",
+    )
+    final_conclusion = (
+        generated_conclusion
+        if not raw_conclusion
+        or raw_conclusion == suggested_conclusion
+        or raw_conclusion.startswith(automatic_prefixes)
+        else raw_conclusion
+    )
+
+    return summary, findings, metrics, {
+        "title": "Validação clínica",
+        "status": "Validado" if _is_report_ready(report) else "Pendente de validação",
+        "professional_notes": _clean_clinical_notes(report.clinical_notes),
+    }, {
+        "title": "Conclusão clínica",
+        "final_text": final_conclusion,
+    }
+
+
 def render_clinical_report_pdf(report):
     content = report.content or {}
     issues = validate_clinical_report_data(report)
@@ -1110,10 +1284,10 @@ def render_clinical_report_pdf(report):
         table_width = PDF_CONTENT_WIDTH
         inner_width = table_width - 48
         column_widths = [
-            int(inner_width * 0.33),
-            int(inner_width * 0.14),
-            int(inner_width * 0.12),
-            inner_width - int(inner_width * 0.33) - int(inner_width * 0.14) - int(inner_width * 0.12),
+            int(inner_width * 0.27),
+            int(inner_width * 0.13),
+            int(inner_width * 0.15),
+            inner_width - int(inner_width * 0.27) - int(inner_width * 0.13) - int(inner_width * 0.15),
         ]
 
         header_height = 60
@@ -1144,7 +1318,7 @@ def render_clinical_report_pdf(report):
             fill=COLOR_TABLE_HEADER,
         )
 
-        headers = ["Métrica", "Valor", "Un.", "Interpretação"]
+        headers = ["Métrica", "Valor", "Unidade", "Interpretação"]
         x_positions = [PDF_MARGIN_X + 24]
         for width in column_widths[:-1]:
             x_positions.append(x_positions[-1] + width)
@@ -1177,18 +1351,7 @@ def render_clinical_report_pdf(report):
         y += total_height + 18
 
     identification_items = content.get("identification", {}).get("items", [])
-    summary = content.get("summary", {})
-    findings = content.get("findings", {})
-    metrics = content.get("metrics", {})
-    validation = content.get("validation", {})
-    conclusion = content.get("conclusion", {})
-    highlights = summary.get("highlights", [])
-    identification_lookup = {
-        item.get("label"): item.get("value")
-        for item in identification_items
-        if isinstance(item, dict)
-    }
-
+    summary, findings, metrics, validation, conclusion = _build_report_presentation(report, content)
     status_label = "VALIDADO" if _is_report_ready(report) else "POR VALIDAR"
     generation_label = _format_display_date(getattr(report, "validated_at", None) or getattr(report, "updated_at", None) or _now().date())
     doctor_label = report.doctor.get_full_name() or report.doctor.username
@@ -1236,7 +1399,7 @@ def render_clinical_report_pdf(report):
         fill="white",
     )
 
-    draw_section(summary.get("title", "Resumo automático da análise"), "Secção 2")
+    draw_section("Resultado da análise", "Secção 2")
     draw_tile_grid(
         [
             {"label": "Resultado da IA", "value": summary.get("ai_result", "—")},
@@ -1244,7 +1407,7 @@ def render_clinical_report_pdf(report):
             {"label": "Classificação", "value": summary.get("classification", "—")},
             {
                 "label": "Risco estimado",
-                "value": next((item.get("value") for item in highlights if item.get("label") == "Risco estimado"), "—"),
+                "value": summary.get("risk", "—"),
             },
         ],
         columns=2,
@@ -1253,22 +1416,20 @@ def render_clinical_report_pdf(report):
     )
     draw_text_panel(
         "Contexto clínico do resultado automático",
-        summary.get("context_note", "O resultado automático deve ser interpretado no contexto clínico global."),
+        summary.get(
+            "context_note",
+            "Resultado automático assistido por inteligência artificial, sujeito a interpretação clínica "
+            "e validação do profissional responsável.",
+        ),
         fill="white",
         accent=COLOR_ACCENT,
     )
-    draw_tile_grid(
-        [{"label": item.get("label", "Indicador"), "value": item.get("value", "—")} for item in highlights],
-        columns=3,
-        fill="white",
-        value_font=bold_font,
-    )
 
-    draw_section(findings.get("title", "Achados / observações da válvula"), "Secção 3")
+    draw_section("Avaliação da válvula aórtica", "Secção 3")
     draw_tile_grid(
         [
             {
-                "label": item.get("label", "Achado"),
+                "label": item.get("label", "Avaliação"),
                 "value": item.get("value", "—"),
             }
             for item in findings.get("items", [])
@@ -1278,41 +1439,29 @@ def render_clinical_report_pdf(report):
         accent=COLOR_ACCENT,
     )
 
-    draw_section(metrics.get("title", "Medições / métricas"), "Secção 4")
+    draw_section("Métricas", "Secção 4")
     draw_metrics_table(metrics.get("rows", []))
 
-    draw_section(validation.get("title", "Validação e edição pelo utilizador"), "Secção 5")
+    draw_section("Validação clínica", "Secção 5")
     draw_key_value_card(
         [
             ("Estado de validação", "Validado" if _is_report_ready(report) else "Pendente de validação"),
-            ("Origem dos campos automáticos", validation.get("generated_note", "Os campos acima foram gerados automaticamente e requerem revisão clínica.")),
         ],
         fill=COLOR_PANEL_ALT,
     )
     draw_text_panel(
-        "Síntese validada pelo utilizador",
-        report.validated_summary or "—",
-        fill="white",
-        accent=COLOR_ACCENT,
-    )
-    draw_text_panel(
-        "Observações clínicas",
-        report.clinical_notes or "—",
+        "Observações do profissional",
+        validation.get("professional_notes", "Sem observações adicionais."),
         fill="white",
         accent=COLOR_ACCENT,
     )
 
-    draw_section(conclusion.get("title", "Conclusão clínica"), "Secção 6")
+    draw_section("Conclusão clínica", "Secção 6")
     draw_text_panel(
         "Conclusão clínica final",
-        report.clinical_conclusion or "—",
+        conclusion.get("final_text", "—"),
         fill=COLOR_PANEL_ALT,
         accent=COLOR_ACCENT,
-    )
-    draw_text_panel(
-        "Base automática para enquadramento",
-        conclusion.get("suggested_text", "—"),
-        fill="white",
     )
 
     footer_text = (

@@ -348,10 +348,8 @@ export default function ClinicalReportPage() {
           reportSaving={reportSaving}
           reportError={reportError}
           reportNotice={reportNotice}
-          validatedSummary={validatedSummary}
           clinicalNotes={clinicalNotes}
           clinicalConclusion={clinicalConclusion}
-          onValidatedSummaryChange={setValidatedSummary}
           onNotesChange={setClinicalNotes}
           onConclusionChange={setClinicalConclusion}
           isEditing={isEditing}

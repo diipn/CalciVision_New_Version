@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { getClinicalReportPresentation } from "../utils/clinicalReportPresentation";
 
 function StatusBadge({ status }) {
   const config =
@@ -46,7 +47,7 @@ function formatDateOnly(value) {
 
 function SectionCard({ title, eyebrow, children, className = "" }) {
   return (
-    <section className={`report-section rounded-[28px] border border-green-pale bg-white p-6 shadow-sm ${className}`}>
+    <section className={`report-section rounded-lg border border-green-pale bg-white p-5 shadow-sm ${className}`}>
       <div className="report-section-heading">
         {eyebrow ? (
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-green-dark">
@@ -55,7 +56,7 @@ function SectionCard({ title, eyebrow, children, className = "" }) {
         ) : null}
         <h3 className="mt-2 text-lg font-semibold text-gray-900">{title}</h3>
       </div>
-      <div className="mt-5">{children}</div>
+      <div className="mt-4">{children}</div>
     </section>
   );
 }
@@ -64,7 +65,7 @@ function KeyValueGrid({ items = [] }) {
   return (
     <div className="grid gap-3 md:grid-cols-2">
       {items.map((item) => (
-        <div key={`${item.label}-${item.value}`} className="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-4">
+        <div key={`${item.label}-${item.value}`} className="rounded-md border border-gray-100 bg-gray-50 px-4 py-3">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{item.label}</p>
           <p className="mt-2 text-sm font-medium leading-6 text-gray-900">{item.value || "—"}</p>
         </div>
@@ -77,7 +78,7 @@ function SummaryCards({ items = [] }) {
   return (
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
       {items.map((item) => (
-        <div key={`${item.label}-${item.value}`} className="rounded-2xl border border-green-pale bg-green-50 px-4 py-4">
+        <div key={`${item.label}-${item.value}`} className="rounded-md border border-green-pale bg-green-50 px-4 py-3">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-green-700">{item.label}</p>
           <p className="mt-2 text-sm font-semibold leading-6 text-green-900">{item.value || "—"}</p>
         </div>
@@ -88,9 +89,9 @@ function SummaryCards({ items = [] }) {
 
 function FindingsList({ items = [] }) {
   return (
-    <div className="space-y-3">
+    <div className="divide-y divide-gray-100 border-y border-gray-100">
       {items.map((item) => (
-        <div key={`${item.label}-${item.value}`} className="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-4">
+        <div key={`${item.label}-${item.value}`} className="px-1 py-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{item.label}</p>
           <p className="mt-2 text-sm leading-7 text-gray-900">{item.value || "—"}</p>
         </div>
@@ -102,20 +103,20 @@ function FindingsList({ items = [] }) {
 function MetricsTable({ rows = [], isPrintMode = false }) {
   if (isPrintMode) {
     return (
-      <div className="overflow-hidden rounded-2xl border border-gray-100">
+      <div className="overflow-hidden rounded-md border border-gray-100">
         <table className="w-full table-fixed border-collapse">
           <thead className="bg-gray-50">
             <tr>
-              <th className="w-[28%] break-words px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+              <th className="w-[27%] break-words px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-500">
                 Métrica
               </th>
-              <th className="w-[14%] break-words px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+              <th className="w-[13%] break-words px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-500">
                 Valor
               </th>
-              <th className="w-[12%] break-words px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+              <th className="w-[15%] break-words px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-500">
                 Unidade
               </th>
-              <th className="w-[46%] break-words px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+              <th className="w-[45%] break-words px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-500">
                 Interpretação
               </th>
             </tr>
@@ -146,7 +147,7 @@ function MetricsTable({ rows = [], isPrintMode = false }) {
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-gray-100">
+    <div className="overflow-hidden rounded-md border border-gray-100">
       <div className="overflow-x-auto overscroll-x-contain">
         <table className="min-w-[980px] w-full border-collapse">
           <thead className="bg-gray-50">
@@ -191,15 +192,12 @@ function MetricsTable({ rows = [], isPrintMode = false }) {
   );
 }
 
-function ReadOnlyTextBlock({ label, helper, value }) {
+function ReadOnlyTextBlock({ label, value }) {
   const lines = String(value || "—").split("\n").filter(Boolean);
 
   return (
-    <div className="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</span>
-        {helper ? <span className="text-xs text-gray-500">{helper}</span> : null}
-      </div>
+    <div className="border-l-2 border-green-pale bg-gray-50 px-4 py-3">
+      <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</span>
       <div className="mt-3 space-y-2 text-sm leading-7 text-gray-900">
         {lines.length > 0 ? lines.map((line, index) => <p key={`${label}-${index}`}>{line}</p>) : <p>—</p>}
       </div>
@@ -215,7 +213,7 @@ function ManualTextarea({ label, helper, value, onChange, placeholder, rows = 5 
         {helper ? <span className="text-xs text-gray-500">{helper}</span> : null}
       </div>
       <textarea
-        className="mt-2 min-h-[160px] w-full rounded-2xl border border-green-pale bg-white px-4 py-3 text-sm leading-7 text-gray-900 outline-none transition focus:border-green-dark"
+        className="mt-2 min-h-[120px] w-full rounded-md border border-green-pale bg-white px-4 py-3 text-sm leading-7 text-gray-900 outline-none transition focus:border-green-dark"
         value={value}
         rows={rows}
         onChange={(event) => onChange(event.target.value)}
@@ -231,10 +229,8 @@ export default function ClinicalReportStep({
   reportSaving,
   reportError,
   reportNotice,
-  validatedSummary,
   clinicalNotes,
   clinicalConclusion,
-  onValidatedSummaryChange,
   onNotesChange,
   onConclusionChange,
   isEditing,
@@ -252,13 +248,16 @@ export default function ClinicalReportStep({
   showActions = true,
 }) {
   const isPrintMode = layoutMode === "print";
-  const reportContent = report?.content || {};
-  const identification = reportContent.identification || {};
-  const summary = reportContent.summary || {};
-  const findings = reportContent.findings || {};
-  const metrics = reportContent.metrics || {};
-  const validation = reportContent.validation || {};
-  const conclusion = reportContent.conclusion || {};
+  const presentation = getClinicalReportPresentation(report, {
+    clinicalNotes,
+    clinicalConclusion,
+  });
+  const identification = presentation.identification;
+  const summary = presentation.summary;
+  const findings = presentation.findings;
+  const metrics = presentation.metrics;
+  const validation = presentation.validation;
+  const conclusion = presentation.conclusion;
   const validationIssues = report?.validation_issues || [];
 
   const identificationItems = identification.items || [];
@@ -266,7 +265,7 @@ export default function ClinicalReportStep({
     { label: "Resultado da IA", value: summary.ai_result || "—" },
     { label: "Calcificação", value: summary.calcification_presence || "—" },
     { label: "Classificação", value: summary.classification || "—" },
-    ...(summary.highlights || []),
+    { label: "Risco estimado", value: summary.risk || "—" },
   ];
 
   const quickFacts = [
@@ -287,8 +286,8 @@ export default function ClinicalReportStep({
 
   return (
     <div className={isPrintMode ? "mx-auto w-full max-w-[794px] space-y-5 bg-white" : "space-y-6"}>
-      <section className="overflow-hidden rounded-[32px] border border-green-pale bg-white shadow-sm">
-        <div className="bg-[linear-gradient(135deg,#f4fbf7_0%,#ffffff_58%,#eef7f2_100%)] px-6 py-6 md:px-8">
+      <section className="overflow-hidden rounded-lg border border-green-pale bg-white shadow-sm">
+        <div className="bg-green-50 px-6 py-5 md:px-8">
           <div className="flex flex-wrap items-start justify-between gap-6">
             <div className="max-w-3xl">
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-green-dark">
@@ -303,7 +302,7 @@ export default function ClinicalReportStep({
               </p>
             </div>
 
-            <div className="flex flex-col items-start gap-3 rounded-[24px] border border-white/80 bg-white/80 px-5 py-4 shadow-sm backdrop-blur">
+            <div className="flex flex-col items-start gap-3 border-l border-green-pale pl-5">
               <div className="flex flex-wrap items-center gap-3">
                 {report ? <StatusBadge status={report.status} /> : null}
                 {reportSaving || reportLoading ? (
@@ -359,8 +358,8 @@ export default function ClinicalReportStep({
           Ainda não existe um relatório gerado para este exame. Volte à análise e gere o relatório primeiro.
         </div>
       ) : (
-        <div className={showActions ? "grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_360px]" : "space-y-6"}>
-          <div className="space-y-6">
+        <div className={showActions ? "grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_340px]" : "space-y-5"}>
+          <div className="space-y-5">
             <SectionCard title="Identificação do paciente" eyebrow="Secção 1">
               <KeyValueGrid items={identificationItems} />
             </SectionCard>
@@ -368,89 +367,59 @@ export default function ClinicalReportStep({
             <SectionCard title="Resultado da análise" eyebrow="Secção 2">
               <div className="space-y-5">
                 <SummaryCards items={highlightedResults} />
-                <div className="rounded-2xl border border-green-pale bg-green-50 px-5 py-4 text-sm leading-7 text-green-900">
-                  {summary.context_note || "O resultado automático deve ser interpretado no contexto clínico global."}
+                <div className="border-l-2 border-green-pale bg-green-50 px-4 py-3 text-sm leading-7 text-green-900">
+                  {summary.context_note ||
+                    "Resultado automático assistido por inteligência artificial, sujeito a interpretação clínica e validação do profissional responsável."}
                 </div>
               </div>
             </SectionCard>
 
-            <div className={isPrintMode ? "space-y-6" : "grid gap-6 2xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]"}>
-              <SectionCard title="Achados e observações da válvula" eyebrow="Secção 3">
-                <FindingsList items={findings.items || []} />
-              </SectionCard>
+            <SectionCard title="Avaliação da válvula aórtica" eyebrow="Secção 3">
+              <FindingsList items={findings.items || []} />
+            </SectionCard>
 
-              <SectionCard title="Métricas" eyebrow="Secção 4">
-                <MetricsTable rows={metrics.rows || []} isPrintMode={isPrintMode} />
-              </SectionCard>
-            </div>
+            <SectionCard title="Métricas" eyebrow="Secção 4">
+              <MetricsTable rows={metrics.rows || []} isPrintMode={isPrintMode} />
+            </SectionCard>
 
-            <SectionCard title="Observações clínicas e validação" eyebrow="Secção 5">
-              <div className="space-y-5">
-                <div className="rounded-2xl border border-gray-100 bg-gray-50 px-5 py-4 text-sm leading-7 text-gray-700">
-                  <p className="font-semibold text-gray-900">{validation.status || "Pendente de validação"}</p>
-                  <p className="mt-2">
-                    {validation.generated_note || "Os campos seguintes compõem a parte revista e confirmada pelo utilizador."}
-                  </p>
-                </div>
+            <SectionCard title="Validação clínica" eyebrow="Secção 5">
+              <div className="space-y-4">
+                <ReadOnlyTextBlock
+                  label="Estado de validação"
+                  value={validation.status || "Pendente de validação"}
+                />
 
                 {isEditing ? (
-                  <>
-                    <ManualTextarea
-                      label="Síntese validada pelo utilizador"
-                      helper="Aparece no relatório web e no PDF"
-                      value={validatedSummary}
-                      onChange={onValidatedSummaryChange}
-                      placeholder="Sintetize a leitura final do exame de forma clínica e objetiva."
-                      rows={5}
-                    />
-
-                    <ManualTextarea
-                      label="Observações clínicas"
-                      helper="Contexto, limitações técnicas, validação médica e recomendações"
-                      value={clinicalNotes}
-                      onChange={onNotesChange}
-                      placeholder="Registe contexto clínico relevante, limitações da imagem, notas sobre a válvula e recomendações."
-                      rows={6}
-                    />
-                  </>
+                  <ManualTextarea
+                    label="Observações do profissional"
+                    value={clinicalNotes}
+                    onChange={onNotesChange}
+                    placeholder="Registe observações clínicas adicionais relevantes."
+                    rows={4}
+                  />
                 ) : (
-                  <>
-                    <ReadOnlyTextBlock
-                      label="Síntese validada pelo utilizador"
-                      helper="Incluída no relatório final"
-                      value={validatedSummary}
-                    />
-                    <ReadOnlyTextBlock
-                      label="Observações clínicas"
-                      helper="Contexto, limitações e recomendações"
-                      value={clinicalNotes}
-                    />
-                  </>
+                  <ReadOnlyTextBlock
+                    label="Observações do profissional"
+                    value={validation.professional_notes}
+                  />
                 )}
               </div>
             </SectionCard>
 
-            <SectionCard title="Conclusão" eyebrow="Secção 6">
-              <div className="space-y-5">
-                <div className="rounded-2xl border border-green-pale bg-green-50 px-5 py-4 text-sm leading-7 text-green-900">
-                  <span className="font-semibold">Base automática:</span>{" "}
-                  {conclusion.suggested_text || "Sem sugestão automática disponível."}
-                </div>
-
+            <SectionCard title="Conclusão clínica" eyebrow="Secção 6">
+              <div>
                 {isEditing ? (
                   <ManualTextarea
                     label="Conclusão clínica final"
-                    helper="Texto final incluído na versão exportada"
                     value={clinicalConclusion}
                     onChange={onConclusionChange}
                     placeholder="Redija a conclusão clínica final com linguagem clara, profissional e pronta para arquivo."
-                    rows={6}
+                    rows={5}
                   />
                 ) : (
                   <ReadOnlyTextBlock
                     label="Conclusão clínica final"
-                    helper="Incluída no documento e no PDF"
-                    value={clinicalConclusion}
+                    value={conclusion.final_text}
                   />
                 )}
               </div>
@@ -458,14 +427,14 @@ export default function ClinicalReportStep({
           </div>
 
           {showActions ? (
-            <aside className="space-y-6 xl:sticky xl:top-6 xl:self-start">
+            <aside className="space-y-5 xl:sticky xl:top-6 xl:self-start">
               <SectionCard title="Ações do relatório" eyebrow="Painel lateral">
                 <div className="space-y-3">
                   {!isEditing ? (
                     <>
                       <button
                         type="button"
-                        className="w-full rounded-2xl bg-green-dark px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
+                        className="h-11 w-full rounded-md bg-green-dark px-4 text-sm font-semibold text-white disabled:opacity-50"
                         onClick={onStartEditing}
                         disabled={reportLoading || reportSaving}
                       >
@@ -473,7 +442,7 @@ export default function ClinicalReportStep({
                       </button>
                       <button
                         type="button"
-                        className="w-full rounded-2xl bg-green px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
+                        className="h-11 w-full rounded-md bg-green px-4 text-sm font-semibold text-white disabled:opacity-50"
                         onClick={onFinalize}
                         disabled={!canFinalize || reportLoading || reportSaving}
                       >
@@ -482,7 +451,7 @@ export default function ClinicalReportStep({
                       {isExportAvailable ? (
                         <button
                           type="button"
-                          className="w-full rounded-2xl border border-green-pale px-4 py-3 text-sm font-semibold text-green-dark"
+                          className="h-11 w-full rounded-md border border-green-pale px-4 text-sm font-semibold text-green-dark"
                           onClick={onExport}
                           disabled={reportLoading || reportSaving}
                         >
@@ -494,7 +463,7 @@ export default function ClinicalReportStep({
                     <>
                       <button
                         type="button"
-                        className="w-full rounded-2xl bg-green-dark px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
+                        className="h-11 w-full rounded-md bg-green-dark px-4 text-sm font-semibold text-white disabled:opacity-50"
                         onClick={onSaveChanges}
                         disabled={!hasUnsavedChanges || reportLoading || reportSaving}
                       >
@@ -502,7 +471,7 @@ export default function ClinicalReportStep({
                       </button>
                       <button
                         type="button"
-                        className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm font-semibold text-gray-700 disabled:opacity-50"
+                        className="h-11 w-full rounded-md border border-gray-200 px-4 text-sm font-semibold text-gray-700 disabled:opacity-50"
                         onClick={onCancelEditing}
                         disabled={reportLoading || reportSaving}
                       >
@@ -539,7 +508,7 @@ export default function ClinicalReportStep({
               <SectionCard title="Resumo operacional" eyebrow="Metadados">
                 <div className="space-y-3">
                   {quickFacts.map((fact) => (
-                    <div key={fact.label} className="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-4">
+                    <div key={fact.label} className="border-b border-gray-100 px-1 py-3 last:border-b-0">
                       <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{fact.label}</p>
                       <p className="mt-2 text-sm font-medium text-gray-900">{fact.value || "—"}</p>
                     </div>

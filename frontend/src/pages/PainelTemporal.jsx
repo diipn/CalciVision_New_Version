@@ -92,8 +92,14 @@ function Sparkline({ values = [], height = 26 }) {
   );
 }
 
-function InfoTooltip({ content }) {
+const TECHNICAL_HELP = {
+  priority:
+    "Classificação de acompanhamento calculada a partir do valor mais recente e da velocidade de evolução. Não substitui a decisão clínica.",
+};
+
+function InfoTooltip({ content, label = "Informação técnica", align = "left" }) {
   const [open, setOpen] = useState(false);
+  const positionClass = align === "right" ? "right-0" : "left-0";
 
   return (
     <div
@@ -103,18 +109,63 @@ function InfoTooltip({ content }) {
     >
       <button
         type="button"
-        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-green-dark/20 bg-white text-xs font-semibold text-green-dark"
-        aria-label="Informação sobre a evolução"
+        className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-green-dark/20 bg-white text-xs font-semibold leading-none text-green-dark shadow-sm transition hover:border-green-dark/40 hover:bg-green-pale focus:outline-none focus:ring-2 focus:ring-green/25"
+        aria-label={label}
+        title={content}
+        onClick={(event) => {
+          event.stopPropagation();
+          setOpen((prev) => !prev);
+        }}
         onFocus={() => setOpen(true)}
         onBlur={() => setOpen(false)}
       >
         i
       </button>
       {open && (
-        <div className="absolute left-0 top-7 z-20 w-72 rounded-xl border border-gray-200 bg-white p-3 text-xs leading-5 text-gray-dark shadow-lg">
+        <div
+          role="tooltip"
+          className={`absolute ${positionClass} top-7 z-20 w-72 rounded-xl border border-gray-200 bg-white p-3 text-xs font-normal leading-5 text-gray-dark shadow-lg`}
+        >
           {content}
         </div>
       )}
+    </div>
+  );
+}
+
+function LabelWithInfo({ children, content, align = "left", className = "" }) {
+  return (
+    <span className={`inline-flex items-center gap-2 ${className}`}>
+      <span>{children}</span>
+      <InfoTooltip content={content} align={align} label={`Informação sobre ${children}`} />
+    </span>
+  );
+}
+
+function VoExplanation({ thresholds }) {
+  const lowLimit = thresholds.value_warn;
+  const highLimit = thresholds.value_high;
+
+  return (
+    <div className="mt-5 rounded-xl border border-green-dark/10 bg-green-light/60 px-4 py-3 text-sm text-gray-dark">
+      <p className="font-semibold text-green-dark">Como interpretar a variável objetiva (VO)</p>
+      <p className="mt-1 leading-6 text-gray-700">
+        A VO é calculada dentro da região de interesse da válvula. O sistema exclui o fundo escuro,
+        normaliza a intensidade da imagem e pondera o sinal compatível com calcificação: píxeis
+        brancos contam como 1 e píxeis cinzentos contam como 0,5. Fórmula: VO = ((brancos + 0,5 ×
+        cinzentos) / píxeis válidos) × 100.
+      </p>
+      <div className="mt-3 grid gap-2 text-xs text-gray-700 md:grid-cols-3">
+        <span className="rounded-lg bg-white px-3 py-2 ring-1 ring-green-dark/10">
+          <strong className="text-gray-dark">0-{formatValue(lowLimit - 0.1)}</strong>: valor baixo
+        </span>
+        <span className="rounded-lg bg-white px-3 py-2 ring-1 ring-green-dark/10">
+          <strong className="text-gray-dark">{formatValue(lowLimit)}-{formatValue(highLimit - 0.1)}</strong>: acompanhar evolução
+        </span>
+        <span className="rounded-lg bg-white px-3 py-2 ring-1 ring-green-dark/10">
+          <strong className="text-gray-dark">≥ {formatValue(highLimit)}</strong>: prioridade alta no painel temporal
+        </span>
+      </div>
     </div>
   );
 }
@@ -183,7 +234,6 @@ export default function PainelTemporal() {
   }, []);
 
   const thresholds = panelData?.thresholds || DEFAULT_THRESHOLDS;
-  const metricLabel = panelData?.metric_label || "Índice de Calcificação";
 
   const rows = useMemo(() => {
     const sourcePatients = panelData?.patients || [];
@@ -325,6 +375,8 @@ export default function PainelTemporal() {
           </div>
         </div>
 
+        <VoExplanation thresholds={thresholds} />
+
         {loading ? (
           <div className="mt-6">
             <LoadingState />
@@ -429,20 +481,15 @@ export default function PainelTemporal() {
                   <thead className="bg-green-light">
                     <tr className="text-left">
                       <th className="px-4 py-3 text-sm font-semibold text-gray-dark">Paciente</th>
-                      <th className="px-4 py-3 text-sm font-semibold text-gray-dark">
-                        <span className="inline-flex items-center gap-2">
-                          Evolução
-                          <InfoTooltip
-                            content={`${metricLabel}: série cronológica dos exames comparáveis do paciente. A partir desta sequência, o sistema calcula evolução, tendência, prioridade e sugestões.`}
-                          />
-                        </span>
-                      </th>
-                      <th className="px-4 py-3 text-sm font-semibold text-gray-dark">Variável objetiva (último)</th>
+                      <th className="px-4 py-3 text-sm font-semibold text-gray-dark">Evolução</th>
+                      <th className="px-4 py-3 text-sm font-semibold text-gray-dark">Variável objetiva</th>
                       <th className="px-4 py-3 text-sm font-semibold text-gray-dark">
                         Taxa {period === "annual" ? "anual" : "mensal"}
                       </th>
                       <th className="px-4 py-3 text-sm font-semibold text-gray-dark">Tendência</th>
-                      <th className="px-4 py-3 text-sm font-semibold text-gray-dark">Prioridade</th>
+                      <th className="px-4 py-3 text-sm font-semibold text-gray-dark">
+                        <LabelWithInfo content={TECHNICAL_HELP.priority}>Prioridade</LabelWithInfo>
+                      </th>
                       <th className="px-4 py-3 text-sm font-semibold text-gray-dark">Último exame</th>
                     </tr>
                   </thead>
@@ -489,9 +536,7 @@ export default function PainelTemporal() {
                                     ? `${formatExamDate(row.firstComparableDate)} → ${formatExamDate(row.lastComparableDate)}`
                                     : "Sem exames comparáveis"}
                                 </p>
-                                <p>
-                                  {row.comparable_exam_count}/{row.exam_count} exames comparáveis
-                                </p>
+                                <p>{row.comparable_exam_count}/{row.exam_count} exames comparáveis</p>
                               </div>
                             </div>
                           </td>

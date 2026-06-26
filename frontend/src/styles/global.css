@@ -2,11 +2,11 @@
 @import "tailwindcss";
 
 @theme {
-  --color-green: #2F7D5D; /* Verde principal */
-  --color-green-dark: #205941;  /* Verde escuro */
-  --color-green-light: #E6F6EA; /* Verde claro */
-  --color-green-pale: #D3EBD7;  /* Verde pálido */
-  --color-green-soft: #F2FBF4;  /* Verde suave */
+  --color-green: var(--palette-primary);
+  --color-green-dark: var(--palette-primary-dark);
+  --color-green-light: var(--palette-primary-light);
+  --color-green-pale: var(--palette-primary-pale);
+  --color-green-soft: var(--palette-primary-soft);
 
   --color-red: #D65C5C; /* Vermelho para alertas */
   --color-red-dark: #A33A3A;  /* Vermelho escuro */
@@ -60,13 +60,21 @@
 }
 
 :root {
+  --palette-primary: #2F7D5D;
+  --palette-primary-dark: #205941;
+  --palette-primary-light: #E6F6EA;
+  --palette-primary-pale: #D3EBD7;
+  --palette-primary-soft: #F2FBF4;
+  --page-background: #F2FBF4;
+  --login-background: #F2FBF4;
+
   font-family: 'Albert Sans', sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
   color-scheme: light dark;
   color: rgba(0, 0, 0, 0.87);
-  background-color: #F2FBF4;
+  background-color: var(--page-background);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -78,6 +86,23 @@
 
   /* Contando com a altura do cabeçalho, qual a altura disponível para o conteúdo */
   --content-height: calc(100vh - var(--header-height));
+}
+
+:root[data-color-mode="original"] {
+  --palette-primary: #B54A4A;
+  --palette-primary-dark: #832E2E;
+  --palette-primary-light: #FFEAEA;
+  --palette-primary-pale: #EDD3D2;
+  --palette-primary-soft: #FFCECE;
+  --page-background: #FFFFFF;
+  --login-background: #FFEAEA;
+
+  --color-green-50: #FFF5F5;
+  --color-green-100: #FFEAEA;
+  --color-green-600: #B54A4A;
+  --color-green-700: #A33A3A;
+  --color-green-800: #832E2E;
+  --color-green-900: #622222;
 }
 
 /* Hide scrollbar for Chrome, Safari and Opera */
@@ -94,12 +119,12 @@
 @media (prefers-color-scheme: light) {
   :root {
     color: #213547;
-    background-color: #F2FBF4;
+    background-color: var(--page-background);
   }
 }
 
 .login-page {
-  background-color: #F2FBF4;
+  background-color: var(--login-background);
   margin: 0;
   display: flex;
   height: 100vh;
@@ -143,6 +168,10 @@ input[type="checkbox"]:checked {
   background-position: center;
   background-repeat: no-repeat;
   background-size: 12px 12px;
+}
+
+:root[data-color-mode="original"] input[type="checkbox"]:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23832E2E' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M3 8.5l3 3L13 4.5'/%3E%3C/svg%3E");
 }
 
 input[type="checkbox"]:disabled {

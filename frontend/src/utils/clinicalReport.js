@@ -162,21 +162,21 @@ export const buildClinicalReportDraft = ({
       grade: objectiveVariable === null ? "N/D" : objectiveVariable >= 50 ? "Elevado" : objectiveVariable >= 30 ? "Intermédio" : "Baixo",
       indicators: automaticSummaryIndicators,
       context_note:
-        "Resultado gerado automaticamente a partir da análise da válvula. Deve ser revisto clinicamente antes da exportação.",
+        "Resultado automático assistido por inteligência artificial, sujeito a interpretação clínica e validação do profissional responsável.",
     },
     findings: {
       valve_state:
         classificationChoice === null
-          ? "Estado valvular por confirmar"
+          ? "Avaliação valvular por confirmar"
           : classificationChoice
-          ? "Achados compatíveis com calcificação valvular"
-          : "Sem sinais marcados de calcificação valvular",
+          ? "A análise indica sinais compatíveis com calcificação valvular aórtica no conjunto de imagens analisado."
+          : "Não foram identificados sinais relevantes de calcificação valvular aórtica no conjunto de imagens analisado.",
       calcification_presence: classificationLabel,
       auto_findings: autoFindings,
       validated_observations: inputs?.valveObservations?.trim() || "",
       summary:
         inputs?.valveObservations?.trim() ||
-        "Sem observações clínicas adicionais registadas nesta revisão.",
+        "Sem observações adicionais.",
     },
     measurements: [
       {
@@ -217,10 +217,14 @@ export const buildClinicalReportDraft = ({
       final_text:
         inputs?.conclusion?.trim() ||
         (classificationChoice === null
-          ? "Conclusão pendente. Confirme a classificação e reveja os achados antes de finalizar o relatório."
+          ? "Conclusão pendente. Confirme a classificação e reveja a avaliação antes de finalizar o relatório."
           : classificationChoice
-          ? "Achados compatíveis com calcificação valvular aórtica. Correlacionar com avaliação clínica e restante estudo ecocardiográfico."
-          : "Sem evidência relevante de calcificação valvular aórtica nesta análise. Correlacionar com a avaliação clínica global."),
+          ? `A análise assistida por inteligência artificial sugere presença de calcificação valvular aórtica no conjunto de imagens analisado, com índice de calcificação calculado de ${
+              objectiveVariable !== null ? `${objectiveVariable.toFixed(1)}%` : "N/D"
+            }. Este resultado deve ser interpretado em conjunto com a avaliação clínica, os restantes parâmetros ecocardiográficos e a validação do profissional responsável.`
+          : `A análise assistida por inteligência artificial não identificou sinais relevantes de calcificação valvular aórtica no conjunto de imagens analisado. O índice de calcificação calculado foi de ${
+              objectiveVariable !== null ? `${objectiveVariable.toFixed(1)}%` : "N/D"
+            }, enquadrado como baixo risco. Este resultado deve ser interpretado em conjunto com a avaliação clínica, os restantes parâmetros ecocardiográficos e a validação do profissional responsável.`),
       user_edited: Boolean(inputs?.conclusion?.trim()),
     },
   };

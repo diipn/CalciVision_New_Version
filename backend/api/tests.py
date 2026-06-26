@@ -6,6 +6,8 @@ import numpy as np
 from api.utils import aggregate_objective_variable_metrics, quantify_objective_variable
 from api.reporting import (
     TransientClinicalReport,
+    _build_auto_conclusion,
+    _clean_clinical_notes,
     build_report_filename,
     frame_results_have_valid_roi,
     render_clinical_report_pdf,
@@ -155,6 +157,22 @@ class _FakeReport:
 
 
 class ClinicalReportUtilitiesTests(unittest.TestCase):
+    def test_clean_clinical_notes_hides_placeholder_content(self):
+        for value in ("", " ", ".", "..", "Olá", "teste"):
+            self.assertEqual(_clean_clinical_notes(value), "Sem observações adicionais.")
+
+        self.assertEqual(
+            _clean_clinical_notes("Janela acústica limitada."),
+            "Janela acústica limitada.",
+        )
+
+    def test_auto_conclusion_identifies_ai_and_clinical_validation(self):
+        conclusion = _build_auto_conclusion(False, "Baixa", "Baixo", 4.2)
+
+        self.assertIn("assistida por inteligência artificial", conclusion)
+        self.assertIn("4.2%", conclusion)
+        self.assertIn("validação do profissional responsável", conclusion)
+
     def test_frame_results_have_valid_roi_detects_real_annotations(self):
         self.assertTrue(
             frame_results_have_valid_roi(
@@ -188,8 +206,8 @@ class ClinicalReportUtilitiesTests(unittest.TestCase):
 
         issues = validate_clinical_report_data(report)
 
-        self.assertGreaterEqual(len(issues), 3)
-        self.assertTrue(any("síntese validada" in issue.lower() for issue in issues))
+        self.assertGreaterEqual(len(issues), 2)
+        self.assertFalse(any("síntese validada" in issue.lower() for issue in issues))
         self.assertTrue(any("conclusão clínica final" in issue.lower() for issue in issues))
 
     def test_render_clinical_report_pdf_returns_pdf_bytes(self):

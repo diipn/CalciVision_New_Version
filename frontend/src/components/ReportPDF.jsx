@@ -5,6 +5,7 @@ import {
   getCalcificationLabel,
   normalizeObjectiveVariable,
 } from "../utils/clinicalReport";
+import { isMeaningfulClinicalText } from "../utils/clinicalReportPresentation";
 
 const styles = StyleSheet.create({
   page: {
@@ -208,11 +209,6 @@ const ReportPDF = ({ reportData, data, patient, medico, reportText }) => {
     hour: "2-digit",
     minute: "2-digit",
   });
-  const reviewerName =
-    validation.reviewer_name ||
-    [medico?.first_name, medico?.last_name].filter(Boolean).join(" ").trim() ||
-    "Utilizador";
-
   return (
     <Document>
       <Page size="A4" style={styles.page}>
@@ -256,7 +252,7 @@ const ReportPDF = ({ reportData, data, patient, medico, reportText }) => {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Resumo automático da análise</Text>
+          <Text style={styles.sectionTitle}>Resultado da análise</Text>
           <View style={styles.chipRow}>
             {(automaticSummary.indicators || []).map((indicator) => (
               <Text key={indicator.label} style={styles.chip}>
@@ -273,15 +269,15 @@ const ReportPDF = ({ reportData, data, patient, medico, reportText }) => {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Achados e observações da válvula</Text>
-          <Text style={styles.note}>Estado da válvula: {findings.valve_state || "N/D"}</Text>
-          <Text style={styles.note}>Calcificação: {findings.calcification_presence || "N/D"}</Text>
+          <Text style={styles.sectionTitle}>Avaliação da válvula aórtica</Text>
+          <Text style={styles.note}>Avaliação da válvula: {findings.valve_state || "N/D"}</Text>
+          <Text style={styles.note}>Presença de calcificação: {findings.calcification_presence || "N/D"}</Text>
           <View style={{ marginTop: 8 }}>
             {renderList(findings.auto_findings)}
           </View>
           {findings.summary ? (
             <Text style={[styles.note, { marginTop: 6 }]}>
-              Observações validadas pelo utilizador: {findings.summary}
+              Enquadramento clínico: {findings.summary}
             </Text>
           ) : null}
         </View>
@@ -309,14 +305,13 @@ const ReportPDF = ({ reportData, data, patient, medico, reportText }) => {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Validação e edição pelo utilizador</Text>
+          <Text style={styles.sectionTitle}>Validação clínica</Text>
           <Text style={styles.note}>Estado da validação: {validation.validation_status || "Pendente"}</Text>
-          <Text style={styles.note}>Revisor: {reviewerName}</Text>
-          <Text style={styles.note}>
-            Campos gerados automaticamente: {(validation.auto_generated_fields || []).join(", ") || "N/D"}
-          </Text>
           <Text style={[styles.note, { marginTop: 6 }]}>
-            Notas de validação: {validation.reviewer_notes || "Sem notas adicionais."}
+            Observações do profissional:{" "}
+            {isMeaningfulClinicalText(validation.reviewer_notes)
+              ? validation.reviewer_notes
+              : "Sem observações adicionais."}
           </Text>
         </View>
 

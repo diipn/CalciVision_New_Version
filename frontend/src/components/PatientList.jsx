@@ -20,8 +20,9 @@ export default function PatientList({ patients, defaultPatient, reloadTable }) {
   };
 
   return (
-    <div>
-      <table className='w-full table-fixed'>
+    <div className="min-w-0">
+      <div className="w-full overflow-x-auto overscroll-x-contain">
+      <table className='w-full min-w-[820px] table-fixed'>
         <thead className='border-b-2'>
           <tr>
             <th className='w-1/20' />
@@ -46,7 +47,8 @@ export default function PatientList({ patients, defaultPatient, reloadTable }) {
             .slice(firstRow - 1, firstRow + rowsPerView - 1)}
         </tbody>
       </table>
-      <div className='flex justify-between mt-5'>
+      </div>
+      <div className='mt-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-center'>
         <div className='flex items-center gap-2'>
           <span>Mostrar</span>
           <input
@@ -57,7 +59,7 @@ export default function PatientList({ patients, defaultPatient, reloadTable }) {
           />
           <span>por página</span>
         </div>
-        <div className='flex gap-2'>
+        <div className='flex flex-wrap items-center gap-2'>
           <button
             className={`mr-4 cursor-pointer ${firstRow > 1 ? 'opacity-100' : 'opacity-500'}`}
             onClick={handleBackToFirstView}
@@ -131,7 +133,7 @@ function PatientRow({ patient, defaultState, reloadTable }) {
       <tr className='bg-green-light'>
         <td colSpan={7} className='p-0! text-left min-w-8'>
           <div className={`patient-row-menu transition-[height] ease-out duration-500 overflow-hidden ${isOpen ? 'h-auto' : 'h-0'}`}>
-            <div className="px-15! py-4! border-b-2 border-b-gray-medium">
+            <div className="border-b-2 border-b-gray-medium px-4! py-4! sm:px-8! lg:px-15!">
               <h6 className='mb-3'>Ecocardiogramas concluídos</h6>
               {completedEchocardiograms.length > 0 ? (
                 <EchocardiogramsTable
@@ -251,7 +253,8 @@ function EchocardiogramsTable({ patient, echocardiograms, reloadTable }) {
         </div>
       )}
 
-      <table className='table-fixed w-full border-collapse'>
+      <div className="w-full overflow-x-auto overscroll-x-contain">
+      <table className='w-full min-w-[760px] table-fixed border-collapse'>
         <thead>
           <tr>
             <th className="w-12 px-4 py-1 border-b-2" aria-label="Selecionar exames para comparar" />
@@ -339,6 +342,7 @@ function EchocardiogramsTable({ patient, echocardiograms, reloadTable }) {
           })}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
@@ -371,7 +375,8 @@ function InProgressAnalysesTable({ patient, echocardiograms, reloadTable }) {
   };
 
   return (
-    <table className='table-fixed w-full border-collapse'>
+    <div className="w-full overflow-x-auto overscroll-x-contain">
+    <table className='w-full min-w-[680px] table-fixed border-collapse'>
       <thead>
         <tr>
           <th className='w-2/5 px-4 py-1 text-left border-b-2'>Exame</th>
@@ -425,5 +430,6 @@ function InProgressAnalysesTable({ patient, echocardiograms, reloadTable }) {
         ))}
       </tbody>
     </table>
+    </div>
   );
 }

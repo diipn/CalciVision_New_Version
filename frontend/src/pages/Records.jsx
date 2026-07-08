@@ -62,10 +62,10 @@ const Records = () => {
 
   return (
     <MainLayout pageTitle="Records - CalciVision">
-      <h3 className="mb-4 w-full">Records</h3>
-      <div className="flex items-center justify-between mb-10">
-        <p className="text-lg">This page provides access to all storage reports associated with your patients.</p>
-        <div className="w-fit px-3 flex items-center rounded-lg outline-1 bg-white outline-gray-medium-dark">
+      <h3 className="mb-4 w-full text-2xl sm:text-3xl">Records</h3>
+      <div className="mb-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-base sm:text-lg">This page provides access to all storage reports associated with your patients.</p>
+        <div className="flex w-full items-center rounded-lg bg-white px-3 outline-1 outline-gray-medium-dark sm:w-fit">
           <button className="w-4 h-4 grid place-items-center bg-transparent cursor-pointer">
             <img
               className="w-full h-full object-contain"
@@ -80,7 +80,7 @@ const Records = () => {
             autoComplete="on"
             role="input"
             placeholder="Search"
-            className="w-50 grow ml-2 p-1 outline-none"
+            className="ml-2 min-w-0 grow p-1 outline-none sm:w-50"
             onChange={handleSearchType}
           />
         </div>
@@ -88,7 +88,8 @@ const Records = () => {
       {isLoading ? (
         <p className="text-gray-600">Loading reports...</p>
       ) : filteredPatients.length > 0 ? (
-        <table className="w-full table-fixed border border-collapse shadow-md rounded-lg">
+        <div className="w-full overflow-x-auto overscroll-x-contain rounded-lg shadow-md">
+        <table className="w-full min-w-[820px] table-fixed border border-collapse">
           <thead className="bg-green-dark text-white">
             <tr>
               <th className="w-1/3 px-4 py-2 text-left">Report Name</th>
@@ -135,6 +136,7 @@ const Records = () => {
             })}
           </tbody>
         </table>
+        </div>
       ) : (
         <p className="text-gray-600">No reports found for "{searchTerm}".</p>
       )}

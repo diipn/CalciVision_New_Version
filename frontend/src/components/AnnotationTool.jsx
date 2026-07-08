@@ -550,7 +550,7 @@ const AnnotationTool = forwardRef(function AnnotationTool({ frames, currentFrame
 
     return (
         <div className='w-full flex flex-col items-center rounded-lg overflow-hidden border border-green-pale bg-white shadow-sm'>
-            <div className={`grid-texture relative w-full h-[560px] overflow-hidden bg-gray-soft`}>
+            <div className={`grid-texture relative h-[clamp(360px,65vh,700px)] w-full overflow-hidden bg-gray-soft`}>
                 <Stage
                     width={Math.max(720, window.innerWidth * 2 / 3)} // 840
                     height={560}

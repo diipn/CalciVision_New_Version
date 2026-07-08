@@ -36,7 +36,7 @@ function Form({ route, method }) {
     };
 
     return (
-        <form onSubmit={handleSubmit} className="flex flex-col m-15 mx-100 p-5 w-100 bg-green-light">
+        <form onSubmit={handleSubmit} className="mx-auto my-8 flex w-full max-w-md flex-col rounded-xl bg-green-light p-5 shadow-sm sm:p-6">
             <input
                 className="bg-green-pale p-2 my-3 h-10 rounded-md border border-black w-full focus:outline-none"
                 type="text"
@@ -75,7 +75,7 @@ function Form({ route, method }) {
 
             <div className="flex justify-center">
                 <br />
-                <button className="mt-7 items-center bg-green h-10 w-50 uppercase text-white rounded-md" type="submit">
+                <button className="mt-5 h-11 w-full rounded-md bg-green px-6 uppercase text-white sm:w-50" type="submit" disabled={loading}>
                     {name}
                 </button>
             </div>

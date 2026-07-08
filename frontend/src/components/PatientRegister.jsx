@@ -114,15 +114,15 @@ const PatientRegister = ({ onClose }) => {
   const handleClose = () => onClose();
 
   return (
-    <div className="fixed w-full h-full z-100" role="menu">
-      <div className="fixed top-0 left-0 w-dvw h-dvh bg-black/20" onClick={handleClose} />
+    <div className="fixed inset-0 z-100" role="dialog" aria-modal="true" aria-labelledby="patient-register-title">
+      <div className="fixed inset-0 bg-black/20" onClick={handleClose} />
       <form
         onSubmit={handleSubmit}
-        className="fixed top-1/2 left-1/2 -translate-1/2 w-4/5 max-w-220 bg-gray-50 pl-10 m-5 p-10"
+        className="fixed inset-x-3 top-1/2 max-h-[calc(100dvh-2rem)] -translate-y-1/2 overflow-y-auto rounded-xl bg-gray-50 p-5 shadow-xl sm:left-1/2 sm:right-auto sm:w-[calc(100%-2rem)] sm:max-w-220 sm:-translate-x-1/2 sm:p-8 lg:p-10"
       >
-        <h2 className="text-center font-bold mb-6">Adicionar doente</h2>
+        <h2 id="patient-register-title" className="mb-6 text-center text-2xl font-bold sm:text-3xl">Adicionar doente</h2>
         <div className="flex justify-center">
-          <div className="items-center inline-block w-300 border-t-[3px] border-green-dark" />
+          <div className="w-full border-t-[3px] border-green-dark" />
         </div>
 
         <div className="relative">
@@ -149,8 +149,8 @@ const PatientRegister = ({ onClose }) => {
           </svg>
         </div>
 
-        <div className="flex justify-between gap-4">
-          <div className="relative w-2/5">
+        <div className="flex flex-col justify-between gap-x-4 sm:flex-row">
+          <div className="relative w-full sm:w-2/5">
             <input
               className="bg-gray-soft w-full p-1 my-3 rounded-md border focus:outline-none pl-10"
               type="date"
@@ -172,7 +172,7 @@ const PatientRegister = ({ onClose }) => {
             </svg>
           </div>
 
-          <div className="relative w-3/10">
+          <div className="relative w-full sm:w-3/10">
             <input
               className="bg-gray-soft w-full p-1 my-3 rounded-md border focus:outline-none pl-10 placeholder-black"
               type="number"
@@ -196,7 +196,7 @@ const PatientRegister = ({ onClose }) => {
             </svg>
           </div>
 
-          <div className="relative w-3/10">
+          <div className="relative w-full sm:w-3/10">
             <select
               className="bg-gray-soft w-full p-1 my-3 rounded-md border focus:outline-none pl-10 appearance-none placeholder-black"
               name="gender"
@@ -221,8 +221,8 @@ const PatientRegister = ({ onClose }) => {
           </div>
         </div>
 
-        <div className="flex justify-between gap-4">
-          <div className="relative w-3/5">
+        <div className="flex flex-col justify-between gap-x-4 sm:flex-row">
+          <div className="relative w-full sm:w-3/5">
             <input
               className="bg-gray-soft w-full p-1 my-3 rounded-md border focus:outline-none pl-10 placeholder-black"
               type="text"
@@ -234,7 +234,7 @@ const PatientRegister = ({ onClose }) => {
             />
           </div>
 
-          <div className="relative w-2/5">
+          <div className="relative w-full sm:w-2/5">
             <input
               className="bg-gray-soft w-full p-1 my-3 rounded-md border focus:outline-none pl-10 placeholder-black"
               type="text"
@@ -246,8 +246,8 @@ const PatientRegister = ({ onClose }) => {
           </div>
         </div>
 
-        <div className="flex justify-between gap-4">
-          <div className="relative w-3/5">
+        <div className="flex flex-col justify-between gap-x-4 sm:flex-row">
+          <div className="relative w-full sm:w-3/5">
             <input
               className="bg-gray-soft w-full p-1 my-3 rounded-md border focus:outline-none pl-10 placeholder-black"
               type="email"
@@ -258,7 +258,7 @@ const PatientRegister = ({ onClose }) => {
             />
           </div>
 
-          <div className="relative w-2/5">
+          <div className="relative w-full sm:w-2/5">
             <input
               className="bg-gray-soft w-full p-1 my-3 rounded-md border focus:outline-none pl-10 placeholder-black"
               type="text"
@@ -271,9 +271,9 @@ const PatientRegister = ({ onClose }) => {
           </div>
         </div>
 
-        <div className="flex gap-4 mt-6 items-center">
+        <div className="mt-6 flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-center">
           <button
-            className="bg-green h-10 w-40 uppercase text-white rounded-md"
+            className="h-10 w-full rounded-md bg-green uppercase text-white sm:w-40"
             type="submit"
             disabled={loading}
           >
@@ -283,7 +283,7 @@ const PatientRegister = ({ onClose }) => {
           <button
             type="button"
             onClick={handleClose}
-            className="bg-gray-300 h-10 w-40 uppercase text-black rounded-md hover:bg-gray-400"
+            className="h-10 w-full rounded-md bg-gray-300 uppercase text-black hover:bg-gray-400 sm:w-40"
           >
             Fechar
           </button>

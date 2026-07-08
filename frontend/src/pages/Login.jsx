@@ -1,4 +1,3 @@
-import React from 'react';
 import Form from "@components/Form";
 import loginImage from '@images/login_image.png';
 import { useNavigate } from 'react-router-dom';
@@ -12,28 +11,29 @@ function Login() {
     }
 
     return (
-        <div className="login-page">
-            <div>
-                <div className="flex items-center ml-30 mt-15 mb-20 gap-3 h-[80px]">
-                    <img src="/calcivision_logo.png" alt="CalciVision" role="img" width={65} />
-                    <h1 className='text-1xl font-normal'><strong>CalciVision</strong></h1>
+        <div className="login-page grid lg:grid-cols-[minmax(0,1fr)_minmax(360px,42%)]">
+            <main className="flex min-w-0 flex-col px-5 py-6 sm:px-10 lg:px-16 xl:px-24">
+                <div className="mb-12 flex h-14 items-center gap-3 sm:mb-20">
+                    <img src="/calcivision_logo.png" alt="CalciVision" role="img" className="h-14 w-14" />
+                    <h1 className='text-2xl font-normal'><strong>CalciVision</strong></h1>
                 </div>
-                <div className="items-center mt-15 -mb-10 w-195 ml-auto">
-                    <p className="text-4xl">Welcome back</p>
-                    <br />
-                    <p className="justify-content-left -mt-3">Please enter your account details</p>
+                <div className="mx-auto w-full max-w-md">
+                    <p className="text-3xl font-semibold sm:text-4xl">Welcome back</p>
+                    <p className="mt-3 text-gray-medium-dark">Please enter your account details</p>
                 </div>
                 <Form route="/api/token/" method="login" />
-                <div className="flex justify-center">
-                    <div className='items-center inline-block w-100 border-t-[1px] border-gray-medium' />
+                <div className="mx-auto flex w-full max-w-md justify-center">
+                    <div className='w-full border-t border-gray-medium' />
                 </div>
-                <p className="text-black items-center mt-8 w-190 ml-auto">Don't have an account yet?&nbsp;
-                    <strong onClick={handleCreateAccountClick} style={{ cursor: 'pointer' }}>
+                <p className="mx-auto mt-6 w-full max-w-md text-center text-black sm:text-left">Don&apos;t have an account yet?&nbsp;
+                    <strong onClick={handleCreateAccountClick} className="cursor-pointer text-green-dark">
                         Create Account
                     </strong>
                 </p>
+            </main>
+            <div className="hidden min-h-0 overflow-hidden lg:block">
+                <img src={loginImage} alt="Login" className="h-full w-full object-cover" />
             </div>
-            <img src={loginImage} alt="Login" className="flex w-200 ml-auto" />
         </div>
     );
 }

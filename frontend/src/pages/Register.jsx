@@ -10,29 +10,29 @@ function Register() {
     }
 
     return (
-        <div className="login-page">
-            <div>
-                <div className="flex items-center ml-30 mt-15 mb-20 gap-3 h-[80px]">
-                    <img src="/calcivision_logo.png" alt="CalciVision" role="img" width={65} />
-                    <h1 className='text-1xl font-normal'><strong>CalciVision</strong></h1>
+        <div className="login-page grid lg:grid-cols-[minmax(0,1fr)_minmax(360px,42%)]">
+            <main className="flex min-w-0 flex-col px-5 py-6 sm:px-10 lg:px-16 xl:px-24">
+                <div className="mb-10 flex h-14 items-center gap-3 sm:mb-14">
+                    <img src="/calcivision_logo.png" alt="CalciVision" role="img" className="h-14 w-14" />
+                    <h1 className='text-2xl font-normal'><strong>CalciVision</strong></h1>
                 </div>
-                <div className="items-center mt-15 -mb-10 w-195 ml-auto">
-                    <p class="text-4xl">Create your account</p>
-                    <br />
-                    <p class="justify-content-left -mt-1">Please fill out the following form according to 
-                        <br/>your medical information</p>
+                <div className="mx-auto w-full max-w-md">
+                    <p className="text-3xl font-semibold sm:text-4xl">Create your account</p>
+                    <p className="mt-3 text-gray-medium-dark">Please fill out the following form according to your medical information</p>
                 </div>
                 <Form route="/api/user/register/" method="register" />
-                <div className="flex justify-center">
-                    <div className='items-center inline-block w-100 border-t-[1px] border-gray-medium' />
+                <div className="mx-auto flex w-full max-w-md justify-center">
+                    <div className='w-full border-t border-gray-medium' />
                 </div>
-                <p class="text-black items-center mt-8 w-190 ml-auto">Already have an account?&nbsp;
-                    <strong onClick={handleCreateAccountClick} style={{ cursor: 'pointer' }}>
+                <p className="mx-auto mt-6 w-full max-w-md text-center text-black sm:text-left">Already have an account?&nbsp;
+                    <strong onClick={handleCreateAccountClick} className="cursor-pointer text-green-dark">
                     Login to your Account
                     </strong>
                 </p>
+            </main>
+            <div className="hidden min-h-0 overflow-hidden lg:block">
+                <img src={loginImage} alt="Register" className="h-full w-full object-cover" />
             </div>
-            <img src={loginImage} alt="Login" class="flex w-200 ml-auto" />
         </div>
     );
 }

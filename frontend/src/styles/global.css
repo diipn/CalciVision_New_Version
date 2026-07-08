@@ -82,10 +82,29 @@
   -moz-osx-font-smoothing: grayscale;
 
   /* A altura do cabeçalho */
-  --header-height: 80px;
+  --header-height: 64px;
 
   /* Contando com a altura do cabeçalho, qual a altura disponível para o conteúdo */
   --content-height: calc(100vh - var(--header-height));
+}
+
+html,
+body,
+#root,
+.app {
+  min-width: 0;
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  overflow-x: hidden;
+}
+
+@media (min-width: 768px) {
+  :root {
+    --header-height: 80px;
+  }
 }
 
 :root[data-color-mode="original"] {
@@ -127,7 +146,8 @@
   background-color: var(--login-background);
   margin: 0;
   display: flex;
-  height: 100vh;
+  min-height: 100dvh;
+  overflow-x: hidden;
 }
 
 .grid-texture:before {

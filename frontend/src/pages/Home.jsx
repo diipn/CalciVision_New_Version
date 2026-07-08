@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import MainLayout from "../layouts/MainLayout";
 import Calendar from "@components/Calendar";
 import { useUser } from "../contexts/UserContext";
@@ -24,9 +24,9 @@ const Home = () => {
   return (
     <MainLayout pageTitle="Início - CalciVision">
       
-      <div className="grid grid-cols-[1fr_24rem] gap-10">
-        <div className="flex flex-col gap-4">
-          <div className="flex w-full min-w-150 bg-gradient-to-r from-red to-red-dark rounded-xl px-10 py-6 shadow-lg text-white font-light">
+      <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)] xl:gap-10">
+        <div className="flex min-w-0 flex-col gap-4">
+          <div className="flex w-full flex-col rounded-xl bg-gradient-to-r from-red to-red-dark px-5 py-6 font-light text-white shadow-lg sm:flex-row sm:px-8 lg:px-10">
             <div className="flex flex-col gap-2 pr-4">
               <p className="text-lg mb-2">
                 {greeting && greeting || 'Bem-vindo de volta,'}
@@ -52,7 +52,7 @@ const Home = () => {
                 </ul>
               </div>
             </div>
-            <div className="w-2/5 ml-auto aspect-square">
+            <div className="mx-auto mt-4 w-40 shrink-0 sm:ml-auto sm:mt-0 sm:w-2/5 sm:max-w-72">
               <img
                 src={welcomeImage}
                 alt="Boas-vindas"
@@ -61,7 +61,7 @@ const Home = () => {
               />
             </div>
           </div>
-          <div className="flex gap-4">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <div className="bg-green rounded-lg shadow-lg overflow-hidden">
               <img src={AIDetectionImage} alt="Classificação por IA" role="img" className="object-cover w-full h-36" />
               <div className="px-6 py-4 text-white">
@@ -89,7 +89,7 @@ const Home = () => {
           </div>
         </div>
         {/* CONTEÚDO LATERAL */}
-        <aside className="flex flex-col gap-6">
+        <aside className="grid min-w-0 grid-cols-1 gap-6 md:grid-cols-2 xl:flex xl:flex-col">
           
           {/* Calendário */}
           <Calendar />

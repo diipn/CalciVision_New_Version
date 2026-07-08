@@ -95,8 +95,8 @@ export default function Patients() {
         <PatientRegister onClose={() => setShowRegister(false)} />
       )}
 
-      <h3 className='mb-4'>Pacientes</h3>
-      <p className='text-lg mb-8'>Nesta página pode gerir todos os pacientes, consultar ecocardiogramas e aceder a relatórios da válvula aórtica.</p>
+      <h3 className='mb-4 text-2xl sm:text-3xl'>Pacientes</h3>
+      <p className='mb-8 text-base sm:text-lg'>Nesta página pode gerir todos os pacientes, consultar ecocardiogramas e aceder a relatórios da válvula aórtica.</p>
       <div className='flex flex-wrap justify-start items-center mb-5 gap-4'>
         <div className='mr-auto flex items-center gap-4 flex-wrap'>
           <button
@@ -132,7 +132,7 @@ export default function Patients() {
             </button>
           </AlertDialogMenu>
         </div>
-        <div className='w-fit px-3 mr-4 flex items-center rounded-lg outline-1 bg-white outline-gray-medium-dark'>
+        <div className='flex w-full items-center rounded-lg bg-white px-3 outline-1 outline-gray-medium-dark sm:w-fit sm:mr-4'>
           <button className='w-4 h-4 mr-2 grid place-items-center bg-transparent cursor-pointer'>
             <img className='w-full h-full object-contain' src={magnifyingGlassIcon} alt="Pesquisar" role="icon" />
           </button>
@@ -142,12 +142,12 @@ export default function Patients() {
             autoComplete='on'
             role='input'
             placeholder='Pesquisar paciente'
-            className='w-48 grow p-1 outline-none'
+            className='min-w-0 grow p-1 outline-none sm:w-48'
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
           />
         </div>
-        <div className='flex items-center gap-2'>
+        <div className='flex w-full flex-wrap items-center gap-2 sm:w-auto'>
           <img className='w-4 h-4 object-contain' src={filterIcon} alt="Filtro" role="icon" />
           <select
             className='px-2 py-1 rounded-lg border border-gray-medium-dark'

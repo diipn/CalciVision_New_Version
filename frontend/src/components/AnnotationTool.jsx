@@ -1,15 +1,13 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { Stage, Layer, Image, Rect, Transformer, Group } from "react-konva";
 import useImage from "use-image";
 import { useValveDetection } from "../hooks/useValveDetection";
 import { useCalciumDetection } from "../hooks/useCalciumDetection";
 import { useBatchValveDetection } from "../hooks/useBatchValveDetection";
-import AnnotationToolSlider from "./AnnotationToolSlider";
 import ProgressBar from "./ProgressBar";
-import AnnotationDropdown from "./AnnotationDropdown";
 import { useUnsavedStore } from "../store/useUnsavedStore";
 
-export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, rects, setRects, calcificationStatus, setCalcificationStatus, predictedValveBoxes, setPredictedValveBoxes, calcification, setCalcification, predictionHistory, setPredictionHistory }) {
+const AnnotationTool = forwardRef(function AnnotationTool({ frames, currentFrame, rects, setRects, calcificationStatus, setCalcificationStatus, predictedValveBoxes, setPredictedValveBoxes, calcification, setCalcification, predictionHistory, setPredictionHistory, imageSettings, onImageSettingsChange, onAnnotationChange }, ref) {
     const [frame] = useImage(frames[currentFrame]?.url)
     // Referências ao stage (a área de desenho) e ao group (o conjunto da imagem com as anotações)
     const stageRef = useRef(null);
@@ -33,16 +31,49 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
     // Controla qual é o tipo de ponteiro do rato com base no que o utilizador está a fazer
     const [cursorType, setCursorType] = useState('default');
 
+    const brightness = imageSettings?.brightness ?? 1;
+    const contrast = imageSettings?.contrast ?? 1;
+    const blur = imageSettings?.blur ?? 0;
+    const zoom = imageSettings?.zoom ?? 1;
+
     // Um hook personalizado para iniciar a identificação da válvula de UMA ÚNICA imagem
-    const { progress: valveProgress, isLoading: isLoadingValve, startDetection: startSingleDetection, cancelDetection: cancelSingleDetection } = useValveDetection();
+    const { progress: valveProgress, isLoading: isLoadingValve, error: valveWsError, startDetection: startSingleDetection, cancelDetection: cancelSingleDetection, retryDetection: retryValveDetection, slowDetectionMessage } = useValveDetection();
     
     // Um hook personalizado para iniciar a medição da calcificação de UMA ÚNICA imagem
-    const { progress: calciumProgress, isLoading: isLoadingCalcium, startDetection: startCalciumDetection } = useCalciumDetection();
+    const { progress: calciumProgress, isLoading: isLoadingCalcium, error: calciumWsError, startDetection: startCalciumDetection } = useCalciumDetection();
 
     // Um hook personalizado para iniciar a identificação da válvula de MÚLTIPLAS imagens em batch de forma eficiente
-    const { progress: batchProgress, isLoading: isLoadingBatch, startDetection: startBatchDetection } = useBatchValveDetection();
+    const { progress: batchProgress, isLoading: isLoadingBatch, error: batchWsError, startDetection: startBatchDetection } = useBatchValveDetection();
 
     const { setUnsavedChanges } = useUnsavedStore();
+
+    useImperativeHandle(ref, () => ({
+        iniciarAnotacaoManual() {
+            setSelectedRect(null);
+            setIsDrawing(true);
+        },
+        cancelarAnotacaoManual() {
+            setIsDrawing(false);
+        },
+        detetarValvulaIA() {
+            return handleDetectValve();
+        },
+        detetarCalcificacaoIA() {
+            return handleDetectCalcium();
+        },
+        ajustarManual() {
+            setIsDrawing(true);
+        },
+        reporAnotacaoIA() {
+            handleResetValvePosition();
+        },
+        limparAnotacoes() {
+            handleClearAnnotations();
+        },
+        detetarEmLote() {
+            return handleBatchValvesDetection();
+        },
+    }));
 
     /////////////////////////////////////////////////////////
 
@@ -85,6 +116,12 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
             });
         }
     }, [frame, currentFrame]);
+
+    useEffect(() => {
+        if (zoom && Math.abs(zoom - currentScale) > 0.01) {
+            handleZoom(zoom);
+        }
+    }, [zoom]);
 
     // Função para verificar se as coordenadas estão dentro da imagem
     const isWithinImageBounds = (x, y) => {
@@ -152,8 +189,6 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
                         x: currentRect.width < 0 ? currentRect.x + currentRect.width : currentRect.x,
                         y: currentRect.height < 0 ? currentRect.y + currentRect.height : currentRect.y
                     },
-                    // Espalha os restantes retângulos da imagem
-                    ...updatedRects[currentFrame]
                 ]
                 return updatedRects
             });
@@ -161,18 +196,14 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
         setCurrentRect(null);
         setIsDrawing(false);
         setUnsavedChanges(true);
+        onAnnotationChange?.();
     }
-
-    // Zoom In (aumenta 20%)
-    const handleZoomIn = () => currentScale < 5 && handleZoom(currentScale * 1.2);
-
-    // Zoom Out (diminui 20%)
-    const handleZoomOut = () => currentScale > 0.5 && handleZoom(currentScale / 1.2);
 
     const handleZoom = (newScale) => {
 
         const stage = stageRef.current;
-        const pointerPosition = stage.getPointerPosition();
+        if (!stage) return;
+        const pointerPosition = stage.getPointerPosition() || { x: stage.width() / 2, y: stage.height() / 2 };
 
         const mouseX = (pointerPosition.x - currentPosition.x) / currentScale;
         const mouseY = (pointerPosition.y - currentPosition.y) / currentScale;
@@ -206,29 +237,35 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
         });
         setSelectedRect(null);
         setUnsavedChanges(true);
-    };
-
-    // Função para ativar/desativar o modo de desenho
-    const toggleDrawingMode = () => {
-        if(isDrawing) 
-            setIsDrawing(false)
-        else if(rects[currentFrame]?.length == 0) 
-            setIsDrawing(true)
+        onAnnotationChange?.();
     };
 
     // Função para começar a deteção da válvula através do hook personalizado
     const handleDetectValve = async () => {
         try {
+            if (!frame) {
+                console.warn('Não existe um frame selecionado para analisar.');
+                return null;
+            }
+
             const valveData = await startSingleDetection(frame);
-            
-            const bbox = valveData.bbox;
-            if(bbox.length != 4) throw new Error('Unexpected number of coordinates received.');
+            const bbox = valveData?.bbox;
+            const hasValidCoordinates =
+                Array.isArray(bbox) &&
+                bbox.length === 4 &&
+                bbox.every(coordinate => Number.isFinite(Number(coordinate)));
+
+            if (!hasValidCoordinates) {
+                console.warn('A válvula não foi detetada no frame selecionado.', valveData);
+                return null;
+            }
+
             const [x1, y1, x2, y2] = bbox;
             const valveBox = {
-                x: Math.min(x1, x2),
-                y: Math.min(y1, y2),
-                width: Math.abs(x1 - x2),
-                height: Math.abs(y1 - y2),
+                x: Math.min(Number(x1), Number(x2)),
+                y: Math.min(Number(y1), Number(y2)),
+                width: Math.abs(Number(x1) - Number(x2)),
+                height: Math.abs(Number(y1) - Number(y2)),
                 id: 'prediction',
                 is_annotation_generated: true,
             }
@@ -243,6 +280,8 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
                 return updatedRects
             });
             setUnsavedChanges(true);
+            onAnnotationChange?.();
+            return valveBox;
 
         } catch(error) {
             console.error("Erro na deteção:", error);
@@ -285,9 +324,13 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
                 const calciumResults = data.results?.binary_classification !== undefined ? data.results : null;
                 
                 // Converte a classificação numérica para booleana
-                calciumResults?.binary_classification && (
-                    calciumResults.binary_classification = Boolean(calciumResults?.binary_classification)
-                )
+                if (
+                    calciumResults &&
+                    calciumResults.binary_classification !== undefined &&
+                    calciumResults.binary_classification !== null
+                ) {
+                    calciumResults.binary_classification = Boolean(calciumResults.binary_classification)
+                }
                 
                 let valveBox = null
 
@@ -329,6 +372,7 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
                     }
                 }
                 setUnsavedChanges(true)
+                onAnnotationChange?.();
             }
         })
 
@@ -336,7 +380,12 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
         setPredictedValveBoxes(updatedPreds)
         setCalcification(updatedCalcification)
         setPredictionHistory(updatedHistory)
-        setCalcificationStatus(updatedCalcification[currentFrame]?.binary_classification ? updatedCalcification[currentFrame].binary_classification : null)
+        const nextCalcification = updatedCalcification[currentFrame]?.binary_classification
+        setCalcificationStatus(
+            nextCalcification === undefined || nextCalcification === null
+                ? null
+                : Boolean(nextCalcification)
+        )
 
     }, [batchProgress])
 
@@ -360,6 +409,7 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
             return updatedRects;
         });
         setUnsavedChanges(true);
+        onAnnotationChange?.();
     };
 
     // Apaga a anotação selecionada (selectedRect)
@@ -383,6 +433,7 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
             }
             setSelectedRect(null);
             setUnsavedChanges(true);
+            onAnnotationChange?.();
         }
     }, [selectedRect])
 
@@ -411,6 +462,7 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
             return updatedRects
         })
         setUnsavedChanges(true);
+        onAnnotationChange?.();
     }
 
     useEffect(() => {
@@ -447,6 +499,7 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
                     return updatedRects
                 })
                 setUnsavedChanges(true);
+                onAnnotationChange?.();
             }
         }
         // Adiciona um event listener de digitação (keydown) para quando o utilizador tenta fazer alguma ação
@@ -488,6 +541,7 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
                     return updatedHistory
                 })
                 setUnsavedChanges(true);
+                onAnnotationChange?.();
             }
         } catch(error) {
             console.error(error)
@@ -495,70 +549,7 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
     }
 
     return (
-        <div className='w-[750px] flex flex-col items-center rounded-lg overflow-hidden'>
-            {/* Cabeçalho (com os botões) */}
-            <div className='relative bg-red text-white w-full flex items-center px-6 py-3'>
-                <h5 className='mr-4'>Manual Annotation</h5>
-
-                <div className='flex ml-auto'>
-                    <button onClick={handleZoomIn} className='p-1 rounded-sm' title="Zoom In">
-                        <svg xmlns="http://www.w3.org/2000/svg" width={24} height={24} viewBox="0 0 24 24"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5A6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5S14 7.01 14 9.5S11.99 14 9.5 14m.5-7H9v2H7v1h2v2h1v-2h2V9h-2z"></path></svg>
-                    </button>
-
-                    <button onClick={handleZoomOut} className='p-1 rounded-sm' title="Zoom Out">
-                        <svg xmlns="http://www.w3.org/2000/svg" width={24} height={24} viewBox="0 0 24 24"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5A6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5S14 7.01 14 9.5S11.99 14 9.5 14M7 9h5v1H7z"></path></svg>
-                    </button>
-                </div>
-
-                <div className='flex gap-2 ml-auto text-white'>
-
-                    {/* Botão de cancelar a anotação manual; Botão de retomar posição identificada pelo modelo; Botão de dropdown com os dois tipos de anotação da válvula */}
-                    {isDrawing ? (
-                        <button 
-                            onClick={toggleDrawingMode} 
-                            className='flex items-center bg-red-dark rounded-lg py-2 px-4 space-x-2 text-white'
-                            title='Cancel Manual Annotation'
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" width={24} height={24} viewBox="0 0 24 24"><path fill="currentColor" d="M18.66 2c-.26 0-.5.09-.69.28l-1.84 1.85l3.75 3.75l1.84-1.85c.39-.39.39-1.03 0-1.4l-2.34-2.35c-.2-.19-.47-.28-.72-.28M3.28 4L2 5.28l6.5 6.47l-4.5 4.5V20h3.75l4.5-4.5l6.47 6.5L20 20.72l-6.5-6.47l-3.75-3.75zm11.78 1.19l-4.03 4.03l3.75 3.75l4.03-4.03z"></path></svg>
-                            <span role='tooltip'>Cancel Annotation</span>
-                        </button>
-                    ) : predictedValveBoxes[currentFrame] ? (
-                        <button 
-                            onClick={handleResetValvePosition} 
-                            className='p-2 rounded-sm flex items-center gap-4 transition-colors bg-red-dark disabled:hidden'
-                            title='Reset AI Annotation'
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" width={24} height={24} viewBox="0 0 24 24"><g fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}><path d="M12 3a9 9 0 1 1-5.657 2"></path><path d="M3 4.5h4v4"></path></g></svg>
-                            <span role='tooltip'>Reset Position</span>
-                        </button>
-                    ) : (
-                        <AnnotationDropdown
-                            handleDectectValve={handleDetectValve}
-                            toggleDrawingMode={toggleDrawingMode}
-                            annotated={rects[currentFrame]?.length > 0}
-                        >
-                            <button 
-                                className='flex items-center bg-red-dark rounded-lg py-2 px-4 space-x-2 text-white'
-                                title="AI Valve Detection Tool"
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" width={24} height={24} viewBox="0 0 24 24"><g fill="none" fillRule="evenodd"><path d="m12.593 23.258l-.011.002l-.071.035l-.02.004l-.014-.004l-.071-.035q-.016-.005-.024.005l-.004.01l-.017.428l.005.02l.01.013l.104.074l.015.004l.012-.004l.104-.074l.012-.016l.004-.017l-.017-.427q-.004-.016-.017-.018m.265-.113l-.013.002l-.185.093l-.01.01l-.003.011l.018.43l.005.012l.008.007l.201.093q.019.005.029-.008l.004-.014l-.034-.614q-.005-.018-.02-.022m-.715.002a.02.02 0 0 0-.027.006l-.006.014l-.034.614q.001.018.017.024l.015-.002l.201-.093l.01-.008l.004-.011l.017-.43l-.003-.012l-.01-.01z"></path><path fill="currentColor" d="M20.131 3.16a3 3 0 0 0-4.242 0l-.707.708l4.95 4.95l.706-.707a3 3 0 0 0 0-4.243l-.707-.707Zm-1.414 7.072l-4.95-4.95l-9.09 9.091a1.5 1.5 0 0 0-.401.724l-1.029 4.455a1 1 0 0 0 1.2 1.2l4.456-1.028a1.5 1.5 0 0 0 .723-.401z"></path></g></svg>
-                                <span role='tooltip'>Annotate Valve</span>
-                            </button>
-                        </AnnotationDropdown>
-                    )}
-
-                    {/* Botão de deteção do cálcio */}
-                    <button 
-                        onClick={handleDetectCalcium} 
-                        className='flex items-center bg-red-dark rounded-lg py-2 px-4 space-x-2 text-white'
-                        title='AI Calcium Detection Tool'
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" width={24} height={24} viewBox="0 0 24 24"><g fill="none"><path d="m12.594 23.258l-.012.002l-.071.035l-.02.004l-.014-.004l-.071-.036q-.016-.004-.024.006l-.004.01l-.017.428l.005.02l.01.013l.104.074l.015.004l.012-.004l.104-.074l.012-.016l.004-.017l-.017-.427q-.004-.016-.016-.018m.264-.113l-.014.002l-.184.093l-.01.01l-.003.011l.018.43l.005.012l.008.008l.201.092q.019.005.029-.008l.004-.014l-.034-.614q-.005-.019-.02-.022m-.715.002a.02.02 0 0 0-.027.006l-.006.014l-.034.614q.001.018.017.024l.015-.002l.201-.093l.01-.008l.003-.011l.018-.43l-.003-.012l-.01-.01z"></path><path fill="currentColor" d="M9.107 5.448c.598-1.75 3.016-1.803 3.725-.159l.06.16l.807 2.36a4 4 0 0 0 2.276 2.411l.217.081l2.36.806c1.75.598 1.803 3.016.16 3.725l-.16.06l-2.36.807a4 4 0 0 0-2.412 2.276l-.081.216l-.806 2.361c-.598 1.75-3.016 1.803-3.724.16l-.062-.16l-.806-2.36a4 4 0 0 0-2.276-2.412l-.216-.081l-2.36-.806c-1.751-.598-1.804-3.016-.16-3.724l.16-.062l2.36-.806A4 4 0 0 0 8.22 8.025l.081-.216zM19 2a1 1 0 0 1 .898.56l.048.117l.35 1.026l1.027.35a1 1 0 0 1 .118 1.845l-.118.048l-1.026.35l-.35 1.027a1 1 0 0 1-1.845.117l-.048-.117l-.35-1.026l-1.027-.35a1 1 0 0 1-.118-1.845l.118-.048l1.026-.35l.35-1.027A1 1 0 0 1 19 2"></path></g></svg>
-                        <span role='tooltip'>Detect Calcium</span>
-                    </button>
-                </div>
-            </div>
-            {/* Área de seleção */}
+        <div className='w-full flex flex-col items-center rounded-lg overflow-hidden border border-green-pale bg-white shadow-sm'>
             <div className={`grid-texture relative w-full h-[560px] overflow-hidden bg-gray-soft`}>
                 <Stage
                     width={Math.max(720, window.innerWidth * 2 / 3)} // 840
@@ -568,7 +559,7 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
                     onMouseMove={handleMouseMove}
                     onMouseUp={handleMouseUp}
                     onClick={() => setSelectedRect(null)}
-                    style={{ cursor: cursorType }}
+                    style={{ cursor: cursorType, filter: `brightness(${brightness}) contrast(${contrast}) blur(${blur}px)` }}
                 >
                     <Layer>
                         <Group 
@@ -648,6 +639,7 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
                                                 })
                                             )
                                             setUnsavedChanges(true);
+                                            onAnnotationChange?.();
                                         }}
                                         onTransformEnd={() => {
                                             const node = transformerRef.current?.node?.();
@@ -685,6 +677,7 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
                                                 return updatedRects
                                             })
                                             setUnsavedChanges(true)
+                                            onAnnotationChange?.();
                                         }}
                                     />
                                 )
@@ -726,10 +719,10 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
                     <div className='absolute inset-0 flex flex-col justify-center items-center'>
                         <p className='relative z-5 text-white text-xl font-semibold mb-8'>
                             {isLoadingValve 
-                                ? 'Identifying Aortic Valve Area...' 
+                                ? 'A identificar a válvula aórtica...' 
                                 : isLoadingBatch
-                                ? `${batchProgress[frames[currentFrame]?.name]?.phase || 'Waiting for results from other frames'}...`
-                                : 'Searching for Calcium Deposits...'}
+                                ? `${batchProgress[frames[currentFrame]?.name]?.phase || 'A aguardar resultados de outros frames'}...`
+                                : 'A procurar depósitos de cálcio...'}
                         </p>
 
                         {/* Barra de progresso */}
@@ -746,30 +739,45 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
                         </div>
                         
                         <button 
-                            className='relative z-5 w-24 py-1 mt-4 text-center rounded-sm text-lg font-medium bg-red-dark text-white'
+                            className='relative z-5 w-24 py-1 mt-4 text-center rounded-sm text-lg font-medium bg-green-dark text-white'
                             onClick={() => cancelSingleDetection()}
                         >
-                            Cancel
+                            Cancelar
                         </button>
-                        <div className='absolute inset-0 bg-blue-400/10 backdrop-blur-xs' />
+                        <div className='absolute inset-0 bg-green-400/10 backdrop-blur-xs' />
+                    </div>
+                )}
+
+                {/* Erro de ligação ao WS */}
+                {(valveWsError || calciumWsError || batchWsError) && (
+                    <div className='absolute top-4 left-1/2 -translate-x-1/2 z-10 bg-red-500 text-white px-4 py-2 rounded-md text-sm shadow flex items-center gap-3'>
+                        <span>{valveWsError || calciumWsError || batchWsError}</span>
+                        {valveWsError === slowDetectionMessage && (
+                            <button
+                                className='bg-white text-red-600 px-3 py-1 rounded-sm text-xs font-semibold'
+                                onClick={() => retryValveDetection?.()}
+                            >
+                                Tentar novamente
+                            </button>
+                        )}
                     </div>
                 )}
 
                 {/* Caixa de texto com as coordenadas do retângulo selecionado */}
                 {selectedRect && (
                     <div className='absolute bottom-2 left-2 bg-gray-pale rounded-md w-60 h-32 px-3 py-2'>
-                        <h5 className='mb-4'>Bounding Box</h5>
+                        <h5 className='mb-4'>Delimitação</h5>
                         
                         <div className='absolute top-3 right-3 flex gap-2'>
                             {/* Botão para retomar à posição identificada pelo modelo */}
                             {predictedValveBoxes[currentFrame] && (
-                                <button onClick={handleResetValvePosition} title='Reset AI Annotation'>
+                                <button onClick={handleResetValvePosition} title='Repor anotação IA'>
                                     <svg xmlns="http://www.w3.org/2000/svg" width={22} height={22} viewBox="0 0 24 24"><g fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}><path d="M12 3a9 9 0 1 1-5.657 2"></path><path d="M3 4.5h4v4"></path></g></svg>
                                 </button>
                             )}
 
                             {/* Botão para apagar a anotação selecionada */}
-                            <button onClick={handleClearAnnotations} title="Clear All">
+                            <button onClick={handleClearAnnotations} title="Limpar tudo">
                                 <svg xmlns="http://www.w3.org/2000/svg" width={22} height={22} viewBox="0 0 24 24"><path fill="currentColor" fillRule="evenodd" d="M8.106 2.553A1 1 0 0 1 9 2h6a1 1 0 0 1 .894.553L17.618 6H20a1 1 0 1 1 0 2h-1v11a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V8H4a1 1 0 0 1 0-2h2.382zM14.382 4l1 2H8.618l1-2zM11 11a1 1 0 1 0-2 0v6a1 1 0 1 0 2 0zm4 0a1 1 0 1 0-2 0v6a1 1 0 1 0 2 0z" clipRule="evenodd"></path></svg>
                             </button>
                         </div>
@@ -823,30 +831,8 @@ export default function AnnotationTool({ frames, currentFrame, setCurrentFrame, 
                     </div>
                 )}
             </div>
-
-            <div className='w-full h-28 grid grid-cols-[72%_auto] gap-3 rounded-b-xl bg-red'>
-                {/* Slider com as imagens do paciente */}
-                <AnnotationToolSlider 
-                    frames={frames} 
-                    rects={rects} 
-                    currentFrame={currentFrame} 
-                    setCurrentFrame={setCurrentFrame} 
-                    batchStatus={batchProgress}
-                />
-
-                <div className='flex flex-col justify-center gap-2 pr-4 text-white'>
-                    {/* Botão de deteção das válvulas em batch */}
-                    <button 
-                        onClick={handleBatchValvesDetection}
-                        className='p-2 rounded-sm flex items-center justify-center gap-4 transition-colors bg-red-dark disabled:hidden'
-                        title="Batch Valve Identification Tool"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" width={24} height={24} viewBox="0 0 24 24"><path fill="none" stroke="currentColor" strokeWidth={2} d="M19 15h4V1H9v4m6 14h4V5H5v4M1 23h14V9H1z"></path></svg>
-                        <span role='tooltip'>Batch Analysis</span>
-                    </button>
-                    <em className="text-sm text-gray-light leading-4">* Both valve identification and calcium detection.</em>
-                </div>
-            </div>
         </div>
     );
-};
+});
+
+export default AnnotationTool;

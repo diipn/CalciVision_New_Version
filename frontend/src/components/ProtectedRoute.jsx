@@ -47,7 +47,7 @@ function ProtectedRoute({ children }) {
     }
 
     if(isAuthorized === null) {
-        return <div>Loading...</div>
+        return <div>A carregar...</div>
     }
 
     return isAuthorized ? children : <Navigate to="/login" />;

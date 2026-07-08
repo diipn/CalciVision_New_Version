@@ -2,11 +2,17 @@
 @import "tailwindcss";
 
 @theme {
-  --color-red: #B54A4A; /* Vermelho principal */
-  --color-red-dark: #832E2E;  /* Vermelho escuro */
+  --color-green: var(--palette-primary);
+  --color-green-dark: var(--palette-primary-dark);
+  --color-green-light: var(--palette-primary-light);
+  --color-green-pale: var(--palette-primary-pale);
+  --color-green-soft: var(--palette-primary-soft);
+
+  --color-red: #D65C5C; /* Vermelho para alertas */
+  --color-red-dark: #A33A3A;  /* Vermelho escuro */
   --color-red-light: #FFEAEA; /* Vermelho claro */
-  --color-red-pale: #EDD3D2;  /* Vermelho pálido */
-  --color-red-soft: #FFCECE;  /* Vermelho suave */
+  --color-red-pale: #F7D8D8;  /* Vermelho pálido */
+  --color-red-soft: #FFEFEF;  /* Vermelho suave */
 
   --color-yellow: #FFD06A; /* Amarelo destaque */
 
@@ -16,8 +22,6 @@
   --color-gray-light: #E8E8E8;
   --color-gray-pale: #D9D9D9;
   --color-gray-soft: #F0F0F0;
-
-  --color-green: #A4D65E; /* Verde */
 }
 
 @layer base {
@@ -56,13 +60,21 @@
 }
 
 :root {
+  --palette-primary: #2F7D5D;
+  --palette-primary-dark: #205941;
+  --palette-primary-light: #E6F6EA;
+  --palette-primary-pale: #D3EBD7;
+  --palette-primary-soft: #F2FBF4;
+  --page-background: #F2FBF4;
+  --login-background: #F2FBF4;
+
   font-family: 'Albert Sans', sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
   color-scheme: light dark;
   color: rgba(0, 0, 0, 0.87);
-  background-color: #ffffff;
+  background-color: var(--page-background);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -74,6 +86,23 @@
 
   /* Contando com a altura do cabeçalho, qual a altura disponível para o conteúdo */
   --content-height: calc(100vh - var(--header-height));
+}
+
+:root[data-color-mode="original"] {
+  --palette-primary: #B54A4A;
+  --palette-primary-dark: #832E2E;
+  --palette-primary-light: #FFEAEA;
+  --palette-primary-pale: #EDD3D2;
+  --palette-primary-soft: #FFCECE;
+  --page-background: #FFFFFF;
+  --login-background: #FFEAEA;
+
+  --color-green-50: #FFF5F5;
+  --color-green-100: #FFEAEA;
+  --color-green-600: #B54A4A;
+  --color-green-700: #A33A3A;
+  --color-green-800: #832E2E;
+  --color-green-900: #622222;
 }
 
 /* Hide scrollbar for Chrome, Safari and Opera */
@@ -90,12 +119,12 @@
 @media (prefers-color-scheme: light) {
   :root {
     color: #213547;
-    background-color: #ffffff;
+    background-color: var(--page-background);
   }
 }
 
 .login-page {
-  background-color: #FFEAEA; /* Azul */
+  background-color: var(--login-background);
   margin: 0;
   display: flex;
   height: 100vh;
@@ -118,7 +147,36 @@
 }
 
 .swiper-button-prev, .swiper-button-next {
-  color: var(--color-red-pale) !important
+  color: var(--color-green-pale) !important
+}
+
+input[type="checkbox"] {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--color-green-dark);
+  border-radius: 4px;
+  background-color: transparent;
+  display: inline-grid;
+  place-items: center;
+  vertical-align: middle;
+}
+
+input[type="checkbox"]:checked {
+  background-color: transparent;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23205941' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M3 8.5l3 3L13 4.5'/%3E%3C/svg%3E");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 12px 12px;
+}
+
+:root[data-color-mode="original"] input[type="checkbox"]:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23832E2E' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M3 8.5l3 3L13 4.5'/%3E%3C/svg%3E");
+}
+
+input[type="checkbox"]:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 /* interpolate-size é uma propriedade recente que ainda não é suportada pelo React */
@@ -126,3 +184,16 @@
   interpolate-size: allow-keywords;
 }
 
+@media print {
+  .report-section {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .report-section-heading,
+  .report-section-heading h3,
+  .report-section-heading p {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+}

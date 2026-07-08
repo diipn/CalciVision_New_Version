@@ -40,6 +40,12 @@ class Echocardiogram(models.Model):
     dicom_file = models.FileField(upload_to='dicom/')
     uploaded_at = models.DateTimeField(auto_now_add=True)
     description = models.TextField(blank=True, null=True)
+    vo = models.FloatField(blank=True, null=True)
+    vo_frame_count = models.PositiveIntegerField(default=0)
+    vo_white_pixels = models.PositiveIntegerField(default=0)
+    vo_gray_pixels = models.PositiveIntegerField(default=0)
+    vo_roi_pixels = models.PositiveIntegerField(default=0)
+    vo_metadata = models.JSONField(default=dict, blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.REVIEW_NEEDED)
 
     def __str__(self):
@@ -64,17 +70,47 @@ class EchoFrameData(models.Model):
     confidence = models.FloatField(default=0.0, blank=True)
     is_annotation_generated = models.BooleanField(null=True)
     is_calcification_generated = models.BooleanField(null=True)
+    objective_variable = models.FloatField(blank=True, null=True)
+    white_pixel_count = models.PositiveIntegerField(blank=True, null=True)
+    gray_pixel_count = models.PositiveIntegerField(blank=True, null=True)
+    valid_pixel_count = models.PositiveIntegerField(blank=True, null=True)
     
     def __str__(self):
         return f"Data for frame {self.frame.frame_index} of {self.frame.echocardiogram.patient.name}"
 
-class ReportPdf(models.Model):
+class ClinicalReport(models.Model):
+
+    class Status(models.TextChoices):
+        DRAFT = 'DRAFT', 'Draft'
+        READY = 'READY', 'Ready'
+        FAILED = 'FAILED', 'Failed'
+
     patient = models.ForeignKey(to=Patient, on_delete=models.CASCADE, related_name='reports')
+    echocardiogram = models.OneToOneField(
+        to=Echocardiogram,
+        on_delete=models.CASCADE,
+        related_name='clinical_report',
+        blank=True,
+        null=True,
+    )
     doctor = models.ForeignKey(to=CustomUser, on_delete=models.CASCADE, related_name='reports')
-    pdf_file = models.FileField(upload_to='reports/')
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
+    content = models.JSONField(default=dict, blank=True)
+    source_snapshot = models.JSONField(default=dict, blank=True)
+    validated_summary = models.TextField(blank=True)
+    clinical_notes = models.TextField(blank=True)
+    clinical_conclusion = models.TextField(blank=True)
+    generation_error = models.TextField(blank=True)
+    pdf_file = models.FileField(upload_to='reports/', blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    validated_at = models.DateTimeField(blank=True, null=True)
+    pdf_generated_at = models.DateTimeField(blank=True, null=True)
     
     @property
     def pdf_name(self):
+        if not self.pdf_file:
+            return ''
         return self.pdf_file.name.split('/')[-1]
     
     @property
@@ -83,6 +119,11 @@ class ReportPdf(models.Model):
             return round(self.pdf_file.size / 1024, 2)
         return 0
 
+    @property
+    def has_pdf(self):
+        return bool(self.pdf_file)
+
     def __str__(self):
-        return f"Report for {self.patient.name} by {self.doctor.username}"
+        exam_id = self.echocardiogram_id or 'legacy'
+        return f"Clinical report {self.id} for {self.patient.name} / exam {exam_id}"
     

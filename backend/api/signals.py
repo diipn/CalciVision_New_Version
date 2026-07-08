@@ -1,6 +1,6 @@
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
-from api.models import Echocardiogram, ReportPdf
+from api.models import ClinicalReport, Echocardiogram
 from django.conf import settings
 import shutil
 import os
@@ -20,8 +20,8 @@ def delete_dicom_file(sender, instance: Echocardiogram, **kwargs):
     if os.path.exists(frame_folder):
         shutil.rmtree(frame_folder)
 
-@receiver(post_delete, sender=ReportPdf)
-def delete_report_file(sender, instance: ReportPdf, **kwargs):
+@receiver(post_delete, sender=ClinicalReport)
+def delete_report_file(sender, instance: ClinicalReport, **kwargs):
     """Apaga o ficheiro físico do PDFs quando um report é removido da base de dados"""
     if instance.pdf_file and os.path.isfile(instance.pdf_file.path):
         os.remove(instance.pdf_file.path)

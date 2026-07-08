@@ -17,12 +17,18 @@ urlpatterns = [
     path('patient/<int:patient_id>/delete/', views.delete_patient, name='delete_patient'),
     path('patient/<int:patient_id>/echocardiogram/add/', views.add_echocardiogram, name='add_echocardiogram'),
     path('patient/<int:patient_id>/echocardiogram/<int:echo_id>/frames/', views.get_frames_for_echocardiogram, name='get_dicom_frames'),
+    path('patient/<int:patient_id>/echocardiogram/<int:echo_id>/start/', views.start_echocardiogram_analysis, name='start_echocardiogram_analysis'),
+    path('patient/<int:patient_id>/echocardiogram/<int:echo_id>/objective-variable/', views.quantify_echocardiogram_objective_variable, name='quantify_echocardiogram_objective_variable'),
     path('patient/<int:patient_id>/echocardiogram/<int:echo_id>/submit/', views.create_or_update_echocardiogram_data, name='create_or_update_echocardiogram_data'),
     path('patient/<int:patient_id>/echocardiogram/<int:echo_id>/delete/', views.delete_echocardiogram, name='delete_echocardiogram'),
+    path('patient/<int:patient_id>/echocardiogram/<int:echo_id>/report/', views.clinical_report_detail, name='clinical_report_detail'),
     path('patient/<int:patient_id>/echodata/', views.get_echocardiogram_data_by_patient, name='echodata-by-patient'),
     path('patients-with-ecos/', views.patient_with_ecos, name='patient_with_ecos'),
+    path('patients/temporal-panel/', views.temporal_panel_data, name='temporal_panel_data'),
 
+    path('reports/', views.list_reports, name='list_reports'),
     path('reports/<int:patient_id>/create/', views.create_report, name='create_report'),
     path('reports/<int:patient_id>/', views.get_report, name='get_report'),
+    path('report/<int:report_id>/export/', views.export_report_pdf, name='export_report_pdf'),
     path('report/<int:report_id>/delete/', views.delete_report, name='delete_report'),
 ]

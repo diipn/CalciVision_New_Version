@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
+from importlib.util import find_spec
 from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
@@ -49,8 +50,11 @@ SIMPLE_JWT = {
 
 # Application definition
 
+HAS_DAPHNE = find_spec('daphne') is not None
+HAS_CHANNELS = find_spec('channels') is not None
+HAS_CHANNELS_REDIS = find_spec('channels_redis') is not None
+
 INSTALLED_APPS = [
-    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -58,11 +62,16 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'corsheaders',
-    'channels',
     'authentication.apps.AuthenticationConfig',
     'api.apps.ApiConfig',
     'rest_framework',
 ]
+
+if HAS_DAPHNE:
+    INSTALLED_APPS.insert(0, 'daphne')
+
+if HAS_CHANNELS:
+    INSTALLED_APPS.append('channels')
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
@@ -112,16 +121,18 @@ TEMPLATES = [
 WSGI_APPLICATION = 'backend.wsgi.application'
 
 # Define o aplicativo ASGI
-ASGI_APPLICATION = 'backend.asgi.application'
+ASGI_APPLICATION = 'backend.asgi.application' if HAS_CHANNELS else None
 
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        'CONFIG': {
-            'hosts': [('redis', 6379)] # Conecta ao Redis no Docker
+CHANNEL_LAYERS = {}
+if HAS_CHANNELS and HAS_CHANNELS_REDIS:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {
+                'hosts': [('redis', 6379)] # Conecta ao Redis no Docker
+            }
         }
     }
-}
 
 REST_FRAMEWORK = {
     'DEFAULT_PARSER_CLASSES': [

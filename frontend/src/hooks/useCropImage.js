@@ -1,5 +1,6 @@
 import { useState } from "react"
 import api from '../api'
+import { buildModelWsUrl } from '../utils/ws'
 
 export function useCropImage(image, bbox) {
 
@@ -20,7 +21,7 @@ export function useCropImage(image, bbox) {
             if(response.status != 200) throw new Error('Error starting the image cropping process')
             const taskId = response.data.task_id
 
-            const socket = new WebSocket(import.meta.env.VITE_WEBSOCKET_URL + `model/${taskId}/`)
+            const socket = new WebSocket(buildModelWsUrl(taskId))
 
             return new Promise((resolve, reject) => {
                 socket.onmessage = function(event) {

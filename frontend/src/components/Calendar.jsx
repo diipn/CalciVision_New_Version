@@ -82,7 +82,7 @@ function Calendar() {
                     {weekdays.map((day, index) =>
                         <li
                             key={index}
-                            className="text-center text-red-dark font-semibold"
+                            className="text-center text-green-dark font-semibold"
                         >
                             {day}
                         </li>
@@ -119,7 +119,7 @@ function Day({ number, today, currentMonth }) {
     return (
         <li className={`grid place-items-center relative ${currentMonth ? 'text-gray-dark' : 'text-gray-medium'} ${today ? 'text-white' : 'text-current'}`}>
             <span className="z-10">{number}</span>
-            {today && <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 aspect-square rounded-full bg-red -z-1" />}
+            {today && <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 aspect-square rounded-full bg-green -z-1" />}
         </li>
     )
 }

@@ -1,28 +1,58 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import api, { createReport, getEchoResults } from "../api";
+import api, { getClinicalReport, getExamSettings, updateExamSettings, upsertClinicalReport } from "../api";
 import { useUser } from "../contexts/UserContext";
 import AlertDialog from "./AlertDialogMenu";
 import { useUnsavedStore } from "../store/useUnsavedStore";
 import { Switch, Tooltip } from "radix-ui";
-import ReportPDF from "./ReportPDF";
-import { pdf } from "@react-pdf/renderer";
 
-const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCalcification, calcificationStatus, setCalcificationStatus, predictionHistory, patient, echoId }) => {
+const VO_THRESHOLD = 0.66;
+
+const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCalcification, calcificationStatus, setCalcificationStatus, predictionHistory, patient, exam, echoId }) => {
   const [echoName, setEchoName] = useState("");
   const [autoReport, setAutoReport] = useState(true);
+  const [voInfoOpen, setVoInfoOpen] = useState(false);
+  const [classificationChoice, setClassificationChoice] = useState(null);
+  const [classificationConfirmed, setClassificationConfirmed] = useState(false);
+  const [isValidated, setIsValidated] = useState(false);
+  const [reportText, setReportText] = useState("");
+  const [reportDraft, setReportDraft] = useState(null);
   const form = useRef(null);
   const { user } = useUser();
   const navigate = useNavigate();
   const { setUnsavedChanges, hasUnsavedChanges } = useUnsavedStore();
 
+  const voValue = exam?.vo ?? null;
+  const autoClassification = voValue !== null ? voValue >= VO_THRESHOLD : false;
+  const activeClassification = classificationChoice === null ? autoClassification : classificationChoice;
+
   useEffect(() => {
-    if (patient) {
-      setEchoName(
-        patient.echocardiograms.find((echo) => echo.id == echoId).description
-      );
+    if (patient && exam) {
+      setEchoName(exam.description);
     }
-  }, [patient]);
+  }, [patient, exam]);
+
+  useEffect(() => {
+    const hydrateSettings = async () => {
+      if (!echoId || !patient?.id) return;
+      const settings = await getExamSettings(echoId);
+      if (settings) {
+        setClassificationChoice(
+          settings.classificationOverride !== undefined
+            ? settings.classificationOverride
+            : null
+        );
+        setClassificationConfirmed(Boolean(settings.classificationConfirmed));
+        setIsValidated(Boolean(settings.validated));
+        setReportText(settings.reportText || "");
+      }
+      const report = await getClinicalReport(patient.id, echoId);
+      if (report) {
+        setReportDraft(report);
+      }
+    };
+    hydrateSettings();
+  }, [echoId, patient?.id]);
 
   useEffect(() => {
     const rectList = rects[currentFrame];
@@ -45,8 +75,6 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
         // Se os resultados do cálcio já estiverem disponíveis, atualiza o status de calcificação
         savedPrediction.results?.binary_classification &&
           setCalcificationStatus(savedPrediction.results.binary_classification);
-
-        console.log("encontrado no histórico");
       } else {
         // Se não houver predição, limpa o valor
         setCalcification((prev) => {
@@ -56,7 +84,6 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
         });
 
         setCalcificationStatus(null);
-        console.log("não encontrado no histórico");
       }
     } else {
       // Se não houver rects, limpa o valor também
@@ -70,30 +97,66 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
     }
   }, [rects[currentFrame], currentFrame]);
 
+  const buildFrameResults = () =>
+    frames.map((frame, frameIndex) => {
+      const frameRects = Array.isArray(rects?.[frameIndex]) ? rects[frameIndex] : [];
+      const cleanedRects = frameRects
+        .map((rect, rectIndex) => ({
+          id: String(rect?.id ?? `${frame.id}-${rectIndex}`),
+          x: Number(rect?.x),
+          y: Number(rect?.y),
+          width: Number(rect?.width),
+          height: Number(rect?.height),
+          is_annotation_generated: Boolean(rect?.is_annotation_generated),
+        }))
+        .filter(
+          (rect) =>
+            Number.isFinite(rect.x) &&
+            Number.isFinite(rect.y) &&
+            Number.isFinite(rect.width) &&
+            Number.isFinite(rect.height)
+        );
+
+      const frameCalc = calcification?.[frameIndex];
+      const calcValue = frameCalc?.binary_classification;
+      const isCalcified =
+        calcValue === null || calcValue === undefined
+          ? typeof calcificationStatus === "boolean"
+            ? calcificationStatus
+            : null
+          : Boolean(calcValue);
+      const generatedCalcium =
+        typeof frameCalc?.is_calcification_generated === "boolean"
+          ? frameCalc.is_calcification_generated
+          : null;
+
+      return {
+        frame_id: frame.id,
+        rects: cleanedRects,
+        is_calcified: isCalcified,
+        generated_calcium: generatedCalcium,
+      };
+    });
+
   /* Quando o médico submete, os dados do ecocardiograma e frames devem ser atualizados */
   const handleUpdateEcho = async (completed) => {
     try {
-      const results = frames.map((frame, frameIndex) => ({
-        frame_id: frame.id,
-        rects: [...rects[frameIndex]],
-        is_calcified: calcificationStatus,
-        generated_calcium:
-          calcification[frameIndex]?.is_calcification_generated,
-      }));
+      const results = buildFrameResults();
 
       await api.post(
         `/api/patient/${patient.id}/echocardiogram/${echoId}/submit/`,
         { results, completed, echoName }
-      );      // Gera o relatório automaticamente
-      if (autoReport && completed) {
+      );
+      // Gera o relatório automaticamente
+      if (autoReport && completed && reportText) {
         try {
-          const echoData = await getEchoResults(patient.id);
-
-          const pdfBlob = await generatePdfBlob(echoData, patient, user);
-          const formData = new FormData();
-          formData.append("pdf_file", pdfBlob, `report_${patient.id}.pdf`);
-
-          await createReport(formData, patient.id);
+          const report = await upsertClinicalReport(patient.id, echoId, {
+            classification_choice: activeClassification,
+            validated_summary: reportText,
+            clinical_conclusion: reportText,
+            mark_ready: true,
+          });
+          setReportDraft(report);
         } catch (err) {
           console.error("Erro ao gerar o relatório:", err);
         }
@@ -104,16 +167,6 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
     } catch (error) {
       console.error("Erro na submissão dos resultados", error);
     }
-  };
-
-  const generatePdfBlob = async (echoData, selectedPatient, user) => {
-    const doc = (
-      <ReportPDF data={echoData} patient={selectedPatient} medico={user} />
-    );
-    const asPdf = pdf([]);
-    asPdf.updateContainer(doc);
-    const blob = await asPdf.toBlob();
-    return blob;
   };
 
   const updateCalcification = (binary_classification) => {
@@ -129,9 +182,7 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
     });
   };
 
-  const framesWithValve = rects.filter(
-    (frameRects) => frameRects.length > 0
-  ).length;
+  const framesWithValve = rects.filter((frameRects) => frameRects.length > 0).length;
   const framesCompleted = rects.filter(
     (frameRects, idx) => frameRects.length > 0 && calcification[idx] !== null
   ).length;
@@ -139,14 +190,70 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
     (frameRects, idx) => frameRects.length > 0 && calcification[idx] !== null
   );
 
+  const riskBadge = () => {
+    if (voValue === null || voValue === undefined) return null;
+    if (voValue < 0.33) {
+      return { label: 'Baixo risco', className: 'bg-green-600 text-white' };
+    }
+    if (voValue < 0.66) {
+      return { label: 'Risco moderado', className: 'bg-orange-500 text-white' };
+    }
+    return { label: 'Alto risco', className: 'bg-red text-white' };
+  };
+
+  const handleConfirmClassification = async () => {
+    await updateExamSettings(echoId, {
+      classificationOverride: classificationChoice,
+      classificationConfirmed: true,
+    });
+    setClassificationConfirmed(true);
+  };
+
+  const handleEditClassification = async () => {
+    await updateExamSettings(echoId, {
+      classificationConfirmed: false,
+    });
+    setClassificationConfirmed(false);
+  };
+
+  const handleValidation = async () => {
+    await updateExamSettings(echoId, { validated: true });
+    setIsValidated(true);
+  };
+
+  const handleGenerateReport = async () => {
+    if (!patient || !exam) return;
+    const template = `RELATÓRIO AUTOMÁTICO - CALCIVISION\n\nPaciente: ${patient.name}\nData do exame: ${new Date(exam.date).toLocaleDateString('pt-PT')}\nVariável Objetiva (VO): ${
+      voValue !== null ? (voValue * 100).toFixed(0) : 'N/A'
+    }%\nClassificação: ${activeClassification ? 'Calcificada' : 'Não calcificada'}\n\nObservações automáticas:\n- Comparação longitudinal recomendada para acompanhar a progressão.\n- Este resultado é uma simulação e não substitui a decisão clínica.`;
+    setReportText(template);
+    await updateExamSettings(echoId, { reportText: template });
+    try {
+      const report = await upsertClinicalReport(patient.id, echoId, {
+        results: buildFrameResults(),
+        classification_choice: activeClassification,
+        validated_summary: template,
+        clinical_conclusion: template,
+        mark_ready: false,
+      });
+      setReportDraft(report);
+    } catch (error) {
+      console.error("Erro ao persistir o relatório clínico:", error);
+    }
+  };
+
+  const handleReportChange = async (value) => {
+    setReportText(value);
+    await updateExamSettings(echoId, { reportText: value, reportUpdatedAt: new Date().toISOString() });
+  };
+
   return (
-    <div className="bg-gray-light p-3 rounded-lg w-full border-t-6 border-red-dark mb-4">
+    <div className="bg-gray-light p-3 rounded-lg w-full border-t-6 border-green-dark mb-4">
       <form id="form" ref={form} className="p-2">
         <div>
           <h3 className="mb-2">{patient?.name}</h3>
           <p>
-            Select the area of interest on the image by drawing a box at the
-            location of the valve.
+            Select the area of interest on the image by drawing a box at the location of the valve.
           </p>
         </div>
 
@@ -168,21 +275,15 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
           <ul className="space-y-1">
             <li>
               <span className="text-gray-600">Total frames:</span>
-              <span className="ml-2 font-medium text-gray-900">
-                {frames.length}
-              </span>
+              <span className="ml-2 font-medium text-gray-900">{frames.length}</span>
             </li>
             <li>
               <span className="text-gray-600">Valve identified:</span>
-              <span className="ml-2 font-medium text-gray-900">
-                {framesWithValve}
-              </span>
+              <span className="ml-2 font-medium text-gray-900">{framesWithValve}</span>
             </li>
             <li>
               <span className="text-gray-600">Completed annotations:</span>
-              <span className="ml-2 font-medium text-gray-900">
-                {framesCompleted}
-              </span>
+              <span className="ml-2 font-medium text-gray-900">{framesCompleted}</span>
             </li>
           </ul>
 
@@ -206,7 +307,7 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
               role="alert"
             >
               <div className="p-1 rounded-full bg-orange-100 text-orange-600">
-                <svg xmlns="http://www.w3.org/2000/svg" width={16} height={16} viewBox="0 0 1024 1024"fill="currentColor">
+                <svg xmlns="http://www.w3.org/2000/svg" width={16} height={16} viewBox="0 0 1024 1024" fill="currentColor">
                   <path d="M512 64a448 448 0 1 1 0 896a448 448 0 0 1 0-896m0 192a58.43 58.43 0 0 0-58.24 63.744l23.36 256.384a35.072 35.072 0 0 0 69.76 0l23.296-256.384A58.43 58.43 0 0 0 512 256m0 512a51.2 51.2 0 1 0 0-102.4a51.2 51.2 0 0 0 0 102.4" />
                 </svg>
               </div>
@@ -215,14 +316,116 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
           )}
         </div>
 
+        <div className="mt-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h4>Variável Objetiva (VO)</h4>
+            <button
+              type="button"
+              className="text-green-dark text-sm font-medium"
+              onClick={() => setVoInfoOpen(!voInfoOpen)}
+            >
+              O que é a VO?
+            </button>
+          </div>
+          {voInfoOpen && (
+            <div className="rounded-md bg-green-50 p-3 text-sm text-green-900 ring-1 ring-green-100">
+              A VO representa o grau estimado de calcificação e permite comparar exames ao longo do tempo.
+              Este valor é simulado e não substitui a decisão clínica.
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-3xl font-semibold text-gray-900">
+              {voValue !== null ? `${(voValue * 100).toFixed(0)}%` : 'N/A'}
+            </span>
+            {riskBadge() && (
+              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${riskBadge().className}`}>
+                {riskBadge().label}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-6 space-y-3">
+          <h4>Classificação da válvula</h4>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              className={`h-12 rounded flex justify-center items-center border ${
+                activeClassification
+                  ? 'bg-green text-white border-green-dark'
+                  : 'bg-gray-200 border-gray-medium-dark'
+              }`}
+              onClick={() => setClassificationChoice(true)}
+            >
+              Calcificada
+            </button>
+            <button
+              type="button"
+              className={`h-12 rounded flex justify-center items-center border ${
+                !activeClassification
+                  ? 'bg-green text-white border-green-dark'
+                  : 'bg-gray-200 border-gray-medium-dark'
+              }`}
+              onClick={() => setClassificationChoice(false)}
+            >
+              Não calcificada
+            </button>
+          </div>
+          <div className="flex items-center gap-3">
+            {!classificationConfirmed ? (
+              <button
+                type="button"
+                className="bg-green-dark text-white px-4 py-2 rounded"
+                onClick={handleConfirmClassification}
+              >
+                Confirmar classificação
+              </button>
+            ) : (
+              <>
+                <span className="text-sm font-semibold text-green-dark">Classificação confirmada</span>
+                <button
+                  type="button"
+                  className="text-sm text-green-dark underline"
+                  onClick={handleEditClassification}
+                >
+                  Alterar classificação
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-6 space-y-3">
+          <h4>Validação da deteção</h4>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              className={`px-4 py-2 rounded ${
+                isValidated
+                  ? 'bg-green-100 text-green-900'
+                  : 'bg-green-dark text-white'
+              }`}
+              onClick={handleValidation}
+              disabled={isValidated}
+            >
+              {isValidated ? 'Deteção validada' : 'Validar deteção'}
+            </button>
+            <span className="text-sm text-gray-600">
+              {isValidated
+                ? 'Próximo passo desbloqueado.'
+                : 'Valide para gerar relatório.'}
+            </span>
+          </div>
+        </div>
+
         <h4 className="mt-4">Calcification</h4>
         <div className="grid grid-cols-2 justify-center gap-3 mt-4">
           <button
             type="button"
             className={`relative h-12 rounded flex justify-center items-center ${
               calcificationStatus === true
-                ? "bg-red text-white border border-gray-medium-dark"
-                : "bg-gray-200 border border-gray-medium-dark"
+                ? 'bg-green text-white border border-gray-medium-dark'
+                : 'bg-gray-200 border border-gray-medium-dark'
             }`}
             onClick={() => updateCalcification(true)}
           >
@@ -230,7 +433,7 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
               (calcification[currentFrame]?.is_calcification_generated ? (
                 <div className="absolute top-2 left-2">
                   <svg xmlns="http://www.w3.org/2000/svg" width={18} height={18} viewBox="0 0 24 24">
-                    <g fill="currentColor"><path d="m12.594 23.258l-.012.002l-.071.035l-.02.004l-.014-.004l-.071-.036q-.016-.004-.024.006l-.004.01l-.017.428l.005.02l.01.013l.104.074l.015.004l.012-.004l.104-.074l.012-.016l.004-.017l-.017-.427q-.004-.016-.016-.018m.264-.113l-.014.002l-.184.093l-.01.01l-.003.011l.018.43l.005.012l.008.008l.201.092q.019.005.029-.008l.004-.014l-.034-.614q-.005-.019-.02-.022m-.715.002a.02.02 0 0 0-.027.006l-.006.014l-.034.614q.001.018.017.024l.015-.002l.201-.093l.01-.008l.003-.011l.018-.43l-.003-.012l-.01-.01z"></path><path className={`${calcificationStatus === true ? "bg-gray-pale" : "bg-gray-medium-dark"}`} d="M9.107 5.448c.598-1.75 3.016-1.803 3.725-.159l.06.16l.807 2.36a4 4 0 0 0 2.276 2.411l.217.081l2.36.806c1.75.598 1.803 3.016.16 3.725l-.16.06l-2.36.807a4 4 0 0 0-2.412 2.276l-.081.216l-.806 2.361c-.598 1.75-3.016 1.803-3.724.16l-.062-.16l-.806-2.36a4 4 0 0 0-2.276-2.412l-.216-.081l-2.36-.806c-1.751-.598-1.804-3.016-.16-3.724l.16-.062l2.36-.806A4 4 0 0 0 8.22 8.025l.081-.216zM19 2a1 1 0 0 1 .898.56l.048.117l.35 1.026l1.027.35a1 1 0 0 1 .118 1.845l-.118.048l-1.026.35l-.35 1.027a1 1 0 0 1-1.845.117l-.048-.117l-.35-1.026l-1.027-.35a1 1 0 0 1-.118-1.845l.118-.048l1.026-.35l.35-1.027A1 1 0 0 1 19 2"></path></g>
+                    <g fill="currentColor"><path d="m12.594 23.258l-.012.002l-.071.035l-.02.004l-.014-.004l-.071-.036q-.016-.004-.024.006l-.004.01l-.017.428l.005.02l.01.013l.104.074l.015.004l.012-.004l.104-.074l.012-.016l.004-.017l-.017-.427q-.004-.016-.016-.018m.264-.113l-.014.002l-.184.093l-.01.01l-.003.011l.018.43l.005.012l.008.008l.201.092q.019.005.029-.008l.004-.014l-.034-.614q-.005-.019-.02-.022m-.715.002a.02.02 0 0 0-.027.006l-.006.014l-.034.614q.001.018.017.024l.015-.002l.201-.093l.01-.008l.003-.011l.018-.43l-.003-.012l-.01-.01z"></path><path className={`${calcificationStatus === true ? "bg-gray-pale" : "bg-gray-medium-dark"}`} d="M9.107 5.448c.598-1.75 3.016-1.803 3.725-.159l.06.16l.807 2.36a4 4 0 0 0 2.276 2.411l.217.081l2.36.806c1.75.598 1.803 3.016.16 3.725l-.16.06l-2.36.807a4 4 0 0 0-2.412 2.276l-.081.216l-.806 2.361c-.598 1.75-3.016 1.803-3.724.16l-.062-.16l-.806-2.36a4 4 0 0 0-2.276-2.412l-.216-.081l-2.36-.806c-1.751-.598-1.804-3.016-.16-3.724l.16-.062l2.36-.806A4 4 0 0 0 8.22 8.025l.081-.216zM19 2a1 1 0 0 1 .898.56l.048.117l.35 1.026l1.027.35a1 1 0 0 1 .118 1.845l-.118.048l-1.026.35l-.35 1.027A1 1 0 0 1 19 2"></path></g>
                   </svg>
                 </div>
               ) : (
@@ -247,8 +450,8 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
             type="button"
             className={`relative h-12 rounded flex justify-center items-center ${
               calcificationStatus === false
-                ? "bg-red text-white border border-gray-medium-dark"
-                : "bg-gray-200 border border-gray-medium-dark"
+                ? 'bg-green text-white border border-gray-medium-dark'
+                : 'bg-gray-200 border border-gray-medium-dark'
             }`}
             onClick={() => updateCalcification(false)}
           >
@@ -256,7 +459,7 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
               (calcification[currentFrame]?.is_calcification_generated ? (
                 <div className="absolute top-2 left-2">
                   <svg xmlns="http://www.w3.org/2000/svg" width={18} height={18} viewBox="0 0 24 24">
-                    <g fill="currentColor"><path d="m12.594 23.258l-.012.002l-.071.035l-.02.004l-.014-.004l-.071-.036q-.016-.004-.024.006l-.004.01l-.017.428l.005.02l.01.013l.104.074l.015.004l.012-.004l.104-.074l.012-.016l.004-.017l-.017-.427q-.004-.016-.016-.018m.264-.113l-.014.002l-.184.093l-.01.01l-.003.011l.018.43l.005.012l.008.008l.201.092q.019.005.029-.008l.004-.014l-.034-.614q-.005-.019-.02-.022m-.715.002a.02.02 0 0 0-.027.006l-.006.014l-.034.614q.001.018.017.024l.015-.002l.201-.093l.01-.008l.003-.011l.018-.43l-.003-.012l-.01-.01z"></path><path className={`${calcificationStatus === true ? "bg-gray-pale" : "bg-gray-medium-dark"}`} d="M9.107 5.448c.598-1.75 3.016-1.803 3.725-.159l.06.16l.807 2.36a4 4 0 0 0 2.276 2.411l.217.081l2.36.806c1.75.598 1.803 3.016.16 3.725l-.16.06l-2.36.807a4 4 0 0 0-2.412 2.276l-.081.216l-.806 2.361c-.598 1.75-3.016 1.803-3.724.16l-.062-.16l-.806-2.36a4 4 0 0 0-2.276-2.412l-.216-.081l-2.36-.806c-1.751-.598-1.804-3.016-.16-3.724l.16-.062l2.36-.806A4 4 0 0 0 8.22 8.025l.081-.216zM19 2a1 1 0 0 1 .898.56l.048.117l.35 1.026l1.027.35a1 1 0 0 1 .118 1.845l-.118.048l-1.026.35l-.35 1.027a1 1 0 0 1-1.845.117l-.048-.117l-.35-1.026l-1.027-.35a1 1 0 0 1-.118-1.845l.118-.048l1.026-.35l.35-1.027A1 1 0 0 1 19 2"></path></g>
+                    <g fill="currentColor"><path d="m12.594 23.258l-.012.002l-.071.035l-.02.004l-.014-.004l-.071-.036q-.016-.004-.024.006l-.004.01l-.017.428l.005.02l.01.013l.104.074l.015.004l.012-.004l.104-.074l.012-.016l.004-.017l-.017-.427q-.004-.016-.016-.018m.264-.113l-.014.002l-.184.093l-.01.01l-.003.011l.018.43l.005.012l.008.008l.201.092q.019.005.029-.008l.004-.014l-.034-.614q-.005-.019-.02-.022m-.715.002a.02.02 0 0 0-.027.006l-.006.014l-.034.614q.001.018.017.024l.015-.002l.201-.093l.01-.008l.003-.011l.018-.43l-.003-.012l-.01-.01z"></path><path className={`${calcificationStatus === true ? "bg-gray-pale" : "bg-gray-medium-dark"}`} d="M9.107 5.448c.598-1.75 3.016-1.803 3.725-.159l.06.16l.807 2.36a4 4 0 0 0 2.276 2.411l.217.081l2.36.806c1.75.598 1.803 3.016.16 3.725l-.16.06l-2.36.807a4 4 0 0 0-2.412 2.276l-.081.216l-.806 2.361c-.598 1.75-3.016 1.803-3.724.16l-.062-.16l-.806-2.36a4 4 0 0 0-2.276-2.412l-.216-.081l-2.36-.806c-1.751-.598-1.804-3.016-.16-3.724l.16-.062l2.36-.806A4 4 0 0 0 8.22 8.025l.081-.216zM19 2a1 1 0 0 1 .898.56l.048.117l.35 1.026l1.027.35a1 1 0 0 1 .118 1.845l-.118.048l-1.026.35l-.35 1.027A1 1 0 0 1 19 2"></path></g>
                   </svg>
                 </div>
               ) : (
@@ -275,25 +478,14 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
             calcification[currentFrame]?.binary_classification !== null && // ou null
             (calcification[currentFrame]?.is_calcification_generated ? (
               calcification[currentFrame].binary_classification ? (
-                <strong>
-                  The algorithm detected calcium deposits in the delimited area.
-                </strong>
+                <strong>The algorithm detected calcium deposits in the delimited area.</strong>
               ) : (
-                <strong>
-                  The algorithm did not detect calcium deposits in the delimited
-                  area.
-                </strong>
+                <strong>The algorithm did not detect calcium deposits in the delimited area.</strong>
               )
             ) : calcification[currentFrame]?.binary_classification ? (
-              <strong>
-                Dr. {user?.first_name + " " + user?.last_name} marked the valve
-                area as calcified.
-              </strong>
+              <strong>Dr. {user?.first_name + " " + user?.last_name} marked the valve area as calcified.</strong>
             ) : (
-              <strong>
-                Dr. {user?.first_name + " " + user?.last_name} marked the valve
-                area as not calcified.
-              </strong>
+              <strong>Dr. {user?.first_name + " " + user?.last_name} marked the valve area as not calcified.</strong>
             ))}
         </div>
       </form>
@@ -306,11 +498,11 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
         <Switch.Root
           checked={autoReport}
           onCheckedChange={() => setAutoReport(!autoReport)}
-          className="relative h-5 w-9 cursor-default rounded-full bg-red-dark outline-none data-[state=checked]:bg-green-800"
+          className="relative h-5 w-9 cursor-default rounded-full bg-green-dark outline-none data-[state=checked]:bg-green-800"
           id="auto-report"
           style={{ "-webkit-tap-highlight-color": "rgba(0, 0, 0, 0)" }}
         >
-          <Switch.Thumb className="block size-4 translate-x-0.5 rounded-full bg-white shadow-[0_1px_1px] shadow-red-950 transition-transform duration-150 ease-out will-change-transform data-[state=checked]:translate-x-[18px]" />
+          <Switch.Thumb className="block size-4 translate-x-0.5 rounded-full bg-white shadow-[0_1px_1px] shadow-green-950 transition-transform duration-150 ease-out will-change-transform data-[state=checked]:translate-x-[18px]" />
         </Switch.Root>
 
         <Tooltip.Provider delayDuration={500}>
@@ -327,15 +519,39 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
                 className="select-none max-w-82 rounded bg-white px-[15px] py-2.5 text-sm leading-none text-gray-medium-dark shadow-[hsl(206_22%_7%_/_35%)_0px_10px_38px_-10px,_hsl(206_22%_7%_/_20%)_0px_10px_20px_-15px] will-change-[transform,opacity] data-[state=delayed-open]:data-[side=bottom]:animate-slideUpAndFade data-[state=delayed-open]:data-[side=left]:animate-slideRightAndFade data-[state=delayed-open]:data-[side=right]:animate-slideLeftAndFade data-[state=delayed-open]:data-[side=top]:animate-slideDownAndFade"
                 sideOffset={5}
               >
-                Indicates whether or not the clinical report will be
-                automatically generated when results are submitted. If so, the
-                report will be available in Records and in the respective
-                patient's menu.
+                Indicates whether or not the clinical report will be automatically generated when results are submitted.
+                If so, the report will be available in Records and in the respective patient's menu.
                 <Tooltip.Arrow className="fill-white" />
               </Tooltip.Content>
             </Tooltip.Portal>
           </Tooltip.Root>
         </Tooltip.Provider>
+      </div>
+
+      <div className="mt-6 space-y-3">
+        <div className="flex items-center justify-between">
+          <h4>Relatório clínico</h4>
+          <button
+            type="button"
+            className="text-green-dark text-sm font-medium"
+            onClick={handleGenerateReport}
+            disabled={!isValidated}
+          >
+            Gerar relatório
+          </button>
+        </div>
+        <p className="text-sm text-gray-600">
+          {isValidated
+            ? 'Gerar automaticamente e ajustar observações antes de abrir a página dedicada do relatório.'
+            : 'Valide a deteção para desbloquear o relatório.'}
+        </p>
+        <textarea
+          className="w-full min-h-[180px] rounded border border-gray-pale p-3 text-sm bg-white"
+          value={reportText}
+          onChange={(event) => handleReportChange(event.target.value)}
+          placeholder="Clique em 'Gerar relatório' para preencher o template."
+          disabled={!isValidated}
+        />
       </div>
 
       <div className="w-full flex gap-2 mt-8">
@@ -348,7 +564,7 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
             navigate(`/select_echo?patient=${patient.id}&echo=${echoId}`);
           }}
         >
-          <button className="grid place-items-center basis-24 border-red border-2 rounded-lg py-2 text-gray-dark">
+          <button className="grid place-items-center basis-24 border-green-dark border-2 rounded-lg py-2 text-gray-dark">
             Cancel
           </button>
         </AlertDialog>
@@ -359,7 +575,7 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
           text="This action cannot be undone! The current annotation data will be overwritten with the new changes."
           onConfirm={() => handleUpdateEcho(false)}
         >
-          <button className="grid place-items-center basis-24 bg-red rounded-lg py-2 text-white">
+          <button className="grid place-items-center basis-24 bg-green rounded-lg py-2 text-white">
             Save
           </button>
         </AlertDialog>
@@ -370,7 +586,7 @@ const AnnotationToolMenu = ({ frames, currentFrame, rects, calcification, setCal
           text={`This action will formalize ${patient?.name}'s analysis results and mark the echocardiography as complete.`}
           onConfirm={() => handleUpdateEcho(true)}
         >
-          <button className="basis-50 flex items-center justify-center gap-2 ml-auto bg-red-dark rounded-lg py-2 px-6 text-white">
+          <button className="basis-50 flex items-center justify-center gap-2 ml-auto bg-green-dark rounded-lg py-2 px-6 text-white">
             <svg xmlns="http://www.w3.org/2000/svg" width={20} height={20} viewBox="0 0 16 16">
               <path fill="currentColor" fillRule="evenodd" d="M2 2.5a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 .5.5V7h-1V3H3v10h2.005v1H2.5a.5.5 0 0 1-.5-.5zm11.994 6.832l-4.52 4.519a.5.5 0 0 1-.706 0l-2.51-2.51l.706-.708l2.157 2.157l4.166-4.166z" clipRule="evenodd"></path>
             </svg>

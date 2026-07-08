@@ -50,7 +50,7 @@ export default function AnalysisReview() {
                     <div className="space-y-6">
                         {Object.entries(groupedTaks).map(([ patient, echos ]) =>
                             <Card key={patient} className="overflow-hidden">
-                                <div className="bg-red p-4 text-white">
+                                <div className="bg-green p-4 text-white">
                                     <h4 className="text-xl font-medium">{patient}</h4>
                                 </div>
                                 <div className="p-4">
@@ -78,7 +78,7 @@ export default function AnalysisReview() {
                                     content="Are you sure you want to stop all ongoing analysis? This will discard all changes made and can't be undone."
                                     onConfirm={() => cancelPatientScreening()}
                                 >
-                                    <button className="basis-48 flex items-center justify-center gap-2 bg-red-dark rounded-lg py-2 px-6 text-white">
+                                    <button className="basis-48 flex items-center justify-center gap-2 bg-green-dark rounded-lg py-2 px-6 text-white">
                                         <svg xmlns="http://www.w3.org/2000/svg" width={24} height={24} viewBox="0 0 24 24">
                                             <path fill="currentColor" d="m12 13.4l2.9 2.9q.275.275.7.275t.7-.275t.275-.7t-.275-.7L13.4 12l2.9-2.9q.275-.275.275-.7t-.275-.7t-.7-.275t-.7.275L12 10.6L9.1 7.7q-.275-.275-.7-.275t-.7.275t-.275.7t.275.7l2.9 2.9l-2.9 2.9q-.275.275-.275.7t.275.7t.7.275t.7-.275zm0 8.6q-2.075 0-3.9-.788t-3.175-2.137T2.788 15.9T2 12t.788-3.9t2.137-3.175T8.1 2.788T12 2t3.9.788t3.175 2.137T21.213 8.1T22 12t-.788 3.9t-2.137 3.175t-3.175 2.138T12 22"></path>
                                         </svg>
@@ -92,7 +92,7 @@ export default function AnalysisReview() {
                                         content="Are you sure you want reject all changes?"
                                         onConfirm={() => cancelPatientScreening()}
                                     >
-                                        <button className="grid place-items-center basis-36 border-red border-2 rounded-lg py-2 text-gray-dark">
+                                        <button className="grid place-items-center basis-36 border-green border-2 rounded-lg py-2 text-gray-dark">
                                             Discard
                                         </button>
                                     </AlertDialogMenu>
@@ -102,7 +102,7 @@ export default function AnalysisReview() {
                                         content='This action will save the results for all echocardiograms involved in the screening and mark them as reviewed. Are you sure you want to proceed?'
                                         onConfirm={() => acceptPatientScreening()}
                                     >
-                                        <button className="basis-36 flex items-center justify-center gap-2 bg-red-dark rounded-lg py-2 px-6 text-white">
+                                        <button className="basis-36 flex items-center justify-center gap-2 bg-green-dark rounded-lg py-2 px-6 text-white">
                                             <svg xmlns="http://www.w3.org/2000/svg" width={20} height={20} viewBox="0 0 16 16">
                                                 <path fill="currentColor" fillRule="evenodd" d="M2 2.5a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 .5.5V7h-1V3H3v10h2.005v1H2.5a.5.5 0 0 1-.5-.5zm11.994 6.832l-4.52 4.519a.5.5 0 0 1-.706 0l-2.51-2.51l.706-.708l2.157 2.157l4.166-4.166z" clipRule="evenodd" />
                                             </svg>
@@ -202,7 +202,7 @@ function FrameCard({ frame }) {
                         <ProgressBar 
                             progress={frame.progress}
                             className="h-2 bg-gray-pale rounded-full overflow-hidden"
-                            barClassName="bg-blue-700"
+                            barClassName="bg-green-700"
                         />
                     </div>
                 )}
@@ -212,7 +212,7 @@ function FrameCard({ frame }) {
                         <div className="flex justify-between">
                             <span className="text-sm text-gray-medium-dark">Binary Classification</span>
                             <span className="font-light">
-                                <div className='py-px px-2 bg-red text-white text-sm rounded-xl'>
+                                <div className='py-px px-2 bg-green text-white text-sm rounded-xl'>
                                     {frame.results.binary_classification === 1 ? 'Calcified' : 'Not Calcified'}
                                 </div>
                             </span>

@@ -136,19 +136,19 @@ export default function UploadDicomFile({ patientId, reloadTable }) {
               </div>
               <p>{dicomFiles.name}</p>
               <button 
-                className='bg-red min-w-24 h-8 text-white rounded-md cursor-pointer grid place-items-center' 
+                className='bg-green min-w-24 h-8 text-white rounded-md cursor-pointer grid place-items-center' 
                 onClick={handleUploadFiles}
                 type='submit'
               >
                 {loadingUpload ? (
-                  <span role='status' className='relative z-5 size-4 rounded-full border-3 border-gray-pale border-t-red-dark animate-spin' />
+                  <span role='status' className='relative z-5 size-4 rounded-full border-3 border-gray-pale border-t-green-dark animate-spin' />
                 ) : (
                   "Upload"
                 )}
               </button>
           </div>
         ) : (
-          <label className='flex gap-2 w-fit bg-red-dark rounded-lg py-1 px-4 mt-5 text-white cursor-pointer'>
+          <label className='flex gap-2 w-fit bg-green-dark rounded-lg py-1 px-4 mt-5 text-white cursor-pointer'>
             <svg xmlns='http://www.w3.org/2000/svg' width={22} height={22} viewBox='0 0 24 24'>
               <path fill='currentColor' d='M11 16V7.85l-2.6 2.6L7 9l5-5l5 5l-1.4 1.45l-2.6-2.6V16zm-5 4q-.825 0-1.412-.587T4 18v-3h2v3h12v-3h2v3q0 .825-.587 1.413T18 20z'></path>
             </svg>

@@ -12,6 +12,9 @@ import Backoffice from "./pages/BackOffice";
 import Reports from "./pages/Reports";
 import Records from "./pages/Records";
 import AnalysisReview from "./pages/AnalysisReview";
+import CompareExams from "./pages/CompareExams";
+import PainelTemporal from "./pages/PainelTemporal";
+import ClinicalReportPage from "./pages/ClinicalReportPage";
 
 function Logout() {
   localStorage.clear();
@@ -25,7 +28,7 @@ function RegisterAndLogout() {
 
 function App() {
   return (
-    <Router>
+    <Router future={{ v7_relativeSplatPath: true }}>
       <div className="app">
         <UserProvider>
           <Routes>
@@ -34,9 +37,12 @@ function App() {
             <Route path="/register" element={<RegisterAndLogout />} />
             <Route path="/logout" element={<Logout />} />
             <Route path="/patients" element={<ProtectedRoute><Patients/></ProtectedRoute>} />
+            <Route path="/painel_temporal" element={<ProtectedRoute><PainelTemporal/></ProtectedRoute>} />
             <Route path="/records" element={<ProtectedRoute><Records/></ProtectedRoute>} />
             <Route path="/select_echo" element={<ProtectedRoute><ManualAnnotationSetup/></ProtectedRoute>} />
             <Route path="/analyse_aortic_valve/:patientId/:echoId" element={<ProtectedRoute><ManualAnnotation/></ProtectedRoute>} />
+            <Route path="/patients/:patientId/reports/:echoId" element={<ProtectedRoute><ClinicalReportPage/></ProtectedRoute>} />
+            <Route path="/patients/:patientId/compare/:examIdA/:examIdB" element={<ProtectedRoute><CompareExams/></ProtectedRoute>} />
             <Route path="/analysis_review" element={<ProtectedRoute><AnalysisReview/></ProtectedRoute>} />
             <Route path="/backoffice" element={<ProtectedRoute><Backoffice></Backoffice></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute><Reports></Reports></ProtectedRoute>} />
